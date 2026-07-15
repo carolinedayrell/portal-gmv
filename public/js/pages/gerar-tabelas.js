@@ -5,6 +5,8 @@ const filtros = {
   ano: { filtroId: "anoFiltro", buscaId: "anoBusca", param: "ano" },
 };
 
+const SHOPPINGS_FATURADO_RECEBIDO_DETALHADO = ["3", "17", "31", "8"];
+
 function debounce(fn, delay = 400) {
   let timer;
 
@@ -644,7 +646,80 @@ if (!anosSelecionados.length) {
 
 async function gerarFaturadoRecebidoDetalhado() {
   const mensagem = document.getElementById("geracaoMensagem");
-  mensagem.textContent = "Modelo detalhado ainda será configurado.";
+  const button = document.getElementById(
+    "gerarFaturadoRecebidoDetalhadoButton"
+  );
+  const { params, anos } = montarParams();
+  const shoppingsSelecionados = getSelectedValues("shoppingFiltro");
+
+  mensagem.textContent = "";
+
+  if (!shoppingsSelecionados.length) {
+    mensagem.textContent = "Selecione pelo menos um shopping.";
+    return;
+  }
+
+  const invalidos = shoppingsSelecionados.filter(
+    (id) =>
+      !SHOPPINGS_FATURADO_RECEBIDO_DETALHADO.includes(String(id))
+  );
+
+  if (invalidos.length) {
+    alert(
+      "O relatório Faturado x Recebido - Detalhado está disponível " +
+      "somente para Só Marcas Contagem, Só Marcas Guarulhos, " +
+      "BH Outlet e Shopping do Avião. Remova Outros e qualquer Oiapoque."
+    );
+    return;
+  }
+
+  const anosSelecionados = anos
+    .map((ano) => String(ano).trim())
+    .filter(Boolean);
+
+  if (!anosSelecionados.length) {
+    mensagem.textContent = "Selecione pelo menos um ano.";
+    return;
+  }
+
+  params.set("anos", anosSelecionados.join(","));
+
+  try {
+    button.disabled = true;
+    mensagem.textContent = "Gerando arquivo detalhado...";
+
+    const token = localStorage.getItem("@portalGMV:token");
+    const response = await fetch(
+      `/api/faturamento/gerar-tabelas/faturado-recebido-detalhado?${params.toString()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const erro = await response.json().catch(() => null);
+      throw new Error(
+        erro?.message || "Erro ao gerar arquivo detalhado."
+      );
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = "faturado-x-recebido-detalhado.xlsx";
+    link.click();
+
+    URL.revokeObjectURL(url);
+    mensagem.textContent = "Arquivo detalhado gerado com sucesso.";
+  } catch (error) {
+    mensagem.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
 }
 
 document.querySelectorAll(".filter-button").forEach((button) => {

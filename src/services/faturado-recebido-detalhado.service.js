@@ -1,46 +1,65 @@
 const ExcelJS = require("exceljs");
 
 const SHOPPINGS_DETALHADO = {
-  "3": {
-    nome: "Só Marcas Contagem",
-    nomeAba: "SMO Contagem",
-    tituloResumo: "SM CTG",
-    modelo: "padrao",
-  },
-  "17": {
-    nome: "Só Marcas Guarulhos",
-    nomeAba: "SMO Guarulhos",
-    tituloResumo: "SM GRU",
-    modelo: "padrao",
-  },
-  "31": {
-    nome: "BH Outlet",
-    nomeAba: "BH Outlet",
-    tituloResumo: "BH",
-    modelo: "bh",
-  },
-  "8": {
-    nome: "Shopping do Avião",
-    nomeAba: "Shopping do Avião",
-    tituloResumo: "Avião",
-    modelo: "aviao",
-  },
+"3": {
+  nome: "Só Marcas Contagem",
+  nomeAba: "Só Marcas Contagem",
+  tituloResumo: "SM CTG",
+  modelo: "padrao",
+  ordemResumo: 1,
+},
+"17": {
+  nome: "Só Marcas Guarulhos",
+  nomeAba: "Só Marcas Guarulhos",
+  tituloResumo: "SM GRU",
+  modelo: "padrao",
+  ordemResumo: 2,
+  usaGas: true,
+},
+"31": {
+  nome: "BH Outlet",
+  nomeAba: "BH Outlet",
+  tituloResumo: "BH",
+  modelo: "bh",
+  ordemResumo: 3,
+},
+"8": {
+  nome: "Shopping do Avião",
+  nomeAba: "Shopping do Avião",
+  tituloResumo: "Avião",
+  modelo: "aviao",
+  ordemResumo: 4,
+},
 };
 
 const CLASSES_DETALHADO = {
   taxaAdministracao: ["14"],
   fundoReserva: ["111"],
   agua: ["143"],
-  gas: ["176"],
+  gas: [
+  "11257",
+  "1297",
+  "1296",
+  "1097",
+  "176",
+],
   energia: ["144"],
   marketing: ["11264"],
   iptu: ["11233"],
   fppAviao: ["11582"],
-  outrasReceitas: ["156"],
-  fundoPromocao: ["4"],
-  condominio: ["2", "11459"],
 
-  // Mantém as classes atualmente tratadas pelo portal como aluguel.
+  outrasReceitas: [
+    "156",
+    "11236",
+  ],
+
+  fundoPromocao: ["4"],
+
+  condominio: [
+    "2",
+    "11459",
+  ],
+
   aluguel: [
     "1",
     "6",
@@ -49,10 +68,10 @@ const CLASSES_DETALHADO = {
     "78",
     "278",
     "2111",
-    "11236",
     "11238",
     "11240",
     "11506",
+    "11509",
   ],
 
   arCondicionado: ["11505"],
@@ -72,7 +91,6 @@ const LINHAS_CAIXA = {
     fundoPromocao: 72,
     total: 74,
   },
-
   bh: {
     taxaAdministracao: 57,
     fundoReserva: 59,
@@ -98,7 +116,6 @@ const LINHAS_RESUMO = {
     especificos: [58, 60, 64],
     total: 74,
   },
-
   bh: {
     aluguel: [73],
     condominio: [75],
@@ -109,16 +126,47 @@ const LINHAS_RESUMO = {
   },
 };
 
+const MESES = [
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+];
+
+const FORMATO_CONTABIL = '#,##0.00;[Red](#,##0.00);-';
+const FORMATO_PERCENTUAL = '0.0%;[Red](0.0%);-';
+const FORMATO_RESUMO = '#,##0;[Red](#,##0);-';
+const COR_CINZA_CLARO = "D9D9D9";
+const COR_CINZA_CAIXA = "BFBFBF";
+const COR_SUBTOTAL = "E7E6E6";
+const COR_TOTAL = "D9D9D9";
+const COR_VALIDACAO = "E7E6E6";
+const COR_BORDA = "A6A6A6";
+
 function splitParam(value) {
-  return String(value || "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
+  return [...new Set(
+    String(value || "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+  )];
 }
 
-function colunaExcel(numero) {
+function numero(value) {
+  return Number(value || 0);
+}
+
+function colunaExcel(numeroColuna) {
   let resultado = "";
-  let atual = numero;
+  let atual = numeroColuna;
 
   while (atual > 0) {
     const resto = (atual - 1) % 26;
@@ -143,24 +191,168 @@ function formulaSomaFonte(nomeAba, coluna, linhas) {
     .join("+");
 }
 
-function numero(value) {
-  return Number(value || 0);
+function criarVetorMensal(tamanho = 12) {
+  return Array.from({ length: tamanho }, () => 0);
 }
 
-function criarVetorMensal() {
-  return Array.from({ length: 12 }, () => 0);
+function encontrarConta(classeId) {
+  return Object.entries(CLASSES_DETALHADO).find(([, classes]) =>
+    classes.includes(String(classeId))
+  )?.[0];
+}
+
+function modeloLinhas(config) {
+  return config.modelo === "bh" ? "bh" : "padrao";
+}
+
+function obterContasCaixa(config) {
+  if (config.modelo === "bh") {
+    return [
+      {
+        chaveLinha: "taxaAdministracao",
+        rotulo: "Taxa de Administração",
+        chaveDados: "taxaAdministracao",
+      },
+      {
+        chaveLinha: "fundoReserva",
+        rotulo: "Fundo de Reserva",
+        chaveDados: "fundoReserva",
+      },
+      {
+        chaveLinha: "agua",
+        rotulo: "Água e Esgoto",
+        chaveDados: "agua",
+      },
+      {
+        chaveLinha: "energia",
+        rotulo: "Energia Elétrica",
+        chaveDados: "energia",
+      },
+      {
+        chaveLinha: "iptu",
+        rotulo: "IPTU",
+        chaveDados: "iptu",
+      },
+      {
+        chaveLinha: "arCondicionado",
+        rotulo: "Ar Condicionado",
+        chaveDados: "arCondicionado",
+      },
+      {
+        chaveLinha: "marketing",
+        rotulo: "Marketing Comemorativo",
+        chaveDados: "marketing",
+      },
+      {
+        chaveLinha: "outrasReceitas",
+        rotulo: "Outras Receitas",
+        chaveDados: "outrasReceitas",
+      },
+      {
+        chaveLinha: "aluguel",
+        rotulo: "Aluguel",
+        chaveDados: "aluguel",
+      },
+      {
+        chaveLinha: "condominio",
+        rotulo: "Condomínio",
+        chaveDados: "condominio",
+      },
+      {
+        chaveLinha: "fundoPromocao",
+        rotulo: "Fundo de Promoção",
+        chaveDados: "fundoPromocao",
+      },
+    ];
+  }
+
+  const guarulhos = config.usaGas === true;
+  const aviao = config.modelo === "aviao";
+
+  return [
+    {
+      chaveLinha: "taxaAdministracao",
+      rotulo: "Taxa de Administração",
+      chaveDados: "taxaAdministracao",
+    },
+    {
+      chaveLinha: "fundoReserva",
+      rotulo: "Fundo de Reserva",
+      chaveDados: "fundoReserva",
+    },
+    {
+      chaveLinha: "aguaOuGas",
+      rotulo: guarulhos
+        ? "Gás"
+        : "Água e Esgoto",
+      chaveDados: guarulhos
+        ? "gas"
+        : "agua",
+    },
+    {
+      chaveLinha: "energia",
+      rotulo: "Energia Elétrica",
+      chaveDados: "energia",
+    },
+    {
+      chaveLinha: "marketingOuIptu",
+      rotulo: aviao
+        ? "IPTU"
+        : "Marketing Comemorativo",
+      chaveDados: aviao
+        ? "iptu"
+        : "marketing",
+    },
+    {
+      chaveLinha: "iptuOuFpp",
+      rotulo: aviao
+        ? "FPP/Feirão"
+        : "IPTU",
+      chaveDados: aviao
+        ? "fppAviao"
+        : "iptu",
+    },
+    {
+      chaveLinha: "outrasReceitas",
+      rotulo: "Outras Receitas",
+      chaveDados: "outrasReceitas",
+    },
+    {
+      chaveLinha: "aluguel",
+      rotulo: "Aluguel",
+      chaveDados: "aluguel",
+    },
+    {
+      chaveLinha: "condominio",
+      rotulo: "Condomínio",
+      chaveDados: "condominio",
+    },
+    {
+      chaveLinha: "fundoPromocao",
+      rotulo: "Fundo de Promoção",
+      chaveDados: "fundoPromocao",
+    },
+  ];
+}
+
+function obterContasPrincipais() {
+  return [
+    { rotulo: "Aluguel", chaveDados: "aluguel" },
+    { rotulo: "Condomínio", chaveDados: "condominio" },
+    { rotulo: "Fundo de Promoção", chaveDados: "fundoPromocao" },
+  ];
 }
 
 async function buscarLancamentosDetalhados(pool, shoppingId, ano) {
   const inicio = `${ano}-01-01`;
-  const fim = `${Number(ano) + 1}-01-01`;
+  const fimCompetencia = `${Number(ano) + 1}-01-01`;
+ const fimCaixa = `${Number(ano) + 1}-01-01`;
 
   const result = await pool.query(
     `
     SELECT
       c.mes_mapa::text AS competencia,
       c.num_classe_da_conta::text AS classe_id,
-
       (
         COALESCE(c.valor_lcto, 0)
         - COALESCE(c.descontos, 0)
@@ -168,51 +360,45 @@ async function buscarLancamentosDetalhados(pool, shoppingId, ano) {
         + COALESCE(c.correcoes, 0)
         + COALESCE(c.multa, 0)
       ) AS faturado,
-
       COALESCE(c.valor_liquidado, 0) AS valor_liquidado,
       c.data_pagamento,
-      c.data_definicao
-
+      TO_CHAR(c.data_definicao, 'YYYY-MM') AS periodo_caixa
     FROM gshop_contas c
-
     LEFT JOIN gshop_locatarios l
       ON l.num_locatario::text = c.num_locatario::text
-
     WHERE c.idfilial::text = $1
-
       AND (
         (
-          c.mes_mapa::text ~ '^(0[1-9]|1[0-2])/[0-9]{4}$'
-          AND TO_DATE(c.mes_mapa::text, 'MM/YYYY') >= $2::date
-          AND TO_DATE(c.mes_mapa::text, 'MM/YYYY') < $3::date
-        )
+          CASE
+            WHEN c.mes_mapa::text ~ '^(0[1-9]|1[0-2])/[0-9]{4}$'
+              THEN TO_DATE(c.mes_mapa::text, 'MM/YYYY')
+            ELSE NULL
+          END
+        ) >= $2::date
+        AND (
+          CASE
+            WHEN c.mes_mapa::text ~ '^(0[1-9]|1[0-2])/[0-9]{4}$'
+              THEN TO_DATE(c.mes_mapa::text, 'MM/YYYY')
+            ELSE NULL
+          END
+        ) < $3::date
         OR (
           c.data_definicao >= $2::date
-          AND c.data_definicao < $3::date
+          AND c.data_definicao < $4::date
         )
       )
-
-      AND COALESCE(UPPER(TRIM(l.nome_fantasia)), '')
-        <> 'EDER BARBOSA DOS REIS'
-
+      AND COALESCE(UPPER(TRIM(l.nome_fantasia)), '') <> 'EDER BARBOSA DOS REIS'
       AND NOT EXISTS (
         SELECT 1
         FROM gshop_contas reemitida
         WHERE reemitida.idlancamento_origem_acordo IS NOT NULL
-          AND reemitida.idlancamento_origem_acordo::text =
-              c.idlancamento::text
+          AND reemitida.idlancamento_origem_acordo::text = c.idlancamento::text
       )
     `,
-    [String(shoppingId), inicio, fim]
+    [String(shoppingId), inicio, fimCompetencia, fimCaixa]
   );
 
   return result.rows;
-}
-
-function encontrarConta(classeId) {
-  return Object.entries(CLASSES_DETALHADO).find(([, classes]) =>
-    classes.includes(String(classeId))
-  )?.[0];
 }
 
 function agruparLancamentos(lancamentos, ano) {
@@ -222,7 +408,7 @@ function agruparLancamentos(lancamentos, ano) {
     dados[conta] = {
       faturado: criarVetorMensal(),
       recebidoCompetencia: criarVetorMensal(),
-      caixa: criarVetorMensal(),
+   caixa: criarVetorMensal(),
     };
   });
 
@@ -230,13 +416,12 @@ function agruparLancamentos(lancamentos, ano) {
     const conta = encontrarConta(item.classe_id);
     if (!conta) return;
 
-    const [, anoCompetencia] = String(item.competencia || "").split("/");
-    const mesCompetencia = Number(
-      String(item.competencia || "").split("/")[0]
-    );
+    const [mesTexto, anoTexto] = String(item.competencia || "").split("/");
+    const mesCompetencia = Number(mesTexto);
+    const anoCompetencia = Number(anoTexto);
 
     if (
-      Number(anoCompetencia) === Number(ano) &&
+      anoCompetencia === Number(ano) &&
       mesCompetencia >= 1 &&
       mesCompetencia <= 12
     ) {
@@ -248,233 +433,1147 @@ function agruparLancamentos(lancamentos, ano) {
       }
     }
 
-    if (item.data_definicao) {
-      const dataCaixa = new Date(item.data_definicao);
+    const [anoCaixaTexto, mesCaixaTexto] = String(item.periodo_caixa || "").split("-");
+    const anoCaixa = Number(anoCaixaTexto);
+    const mesCaixa = Number(mesCaixaTexto);
 
-      if (dataCaixa.getFullYear() === Number(ano)) {
-        dados[conta].caixa[dataCaixa.getMonth()] +=
-          numero(item.valor_liquidado);
-      }
-    }
+if (
+  anoCaixa === Number(ano) &&
+  mesCaixa >= 1 &&
+  mesCaixa <= 12
+) {
+  dados[conta].caixa[mesCaixa - 1] +=
+    numero(item.valor_liquidado);
+}
   });
 
   return dados;
 }
 
-function aplicarValor(cell, valor) {
-  cell.value = numero(valor);
-  cell.numFmt = '#,##0.00';
+function aplicarFonte(
+  cell,
+  size = 11,
+  bold = false,
+  color = "000000"
+) {
+  cell.font = {
+    name: "Aptos Narrow",
+    size,
+    bold,
+    color: { argb: color },
+  };
 }
 
-function aplicarFormula(cell, formula, result = 0) {
-  cell.value = {
-    formula,
-    result: numero(result),
+function aplicarPreenchimento(cell, argb) {
+  cell.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb },
   };
-  cell.numFmt = '#,##0.00';
+}
+
+function removerPreenchimento(cell) {
+  cell.fill = {
+    type: "pattern",
+    pattern: "none",
+  };
+}
+
+function criarLadoBorda() {
+  return {
+    style: "thin",
+    color: { argb: COR_BORDA },
+  };
+}
+
+function aplicarBordasHorizontais(cell) {
+  cell.border = {
+    top: criarLadoBorda(),
+    bottom: criarLadoBorda(),
+  };
+}
+
+function aplicarContornoBloco(
+  sheet,
+  linhaInicial,
+  linhaFinal,
+  colunaInicial = 2,
+  colunaFinal = 15
+) {
+  for (
+    let linha = linhaInicial;
+    linha <= linhaFinal;
+    linha += 1
+  ) {
+    for (
+      let coluna = colunaInicial;
+      coluna <= colunaFinal;
+      coluna += 1
+    ) {
+      const cell = sheet.getCell(linha, coluna);
+      const border = {};
+
+      if (linha === linhaInicial) {
+        border.top = criarLadoBorda();
+      }
+
+      if (linha === linhaFinal) {
+        border.bottom = criarLadoBorda();
+      }
+
+      if (coluna === colunaInicial) {
+        border.left = criarLadoBorda();
+      }
+
+      if (coluna === colunaFinal) {
+        border.right = criarLadoBorda();
+      }
+
+      cell.border = border;
+    }
+  }
+}
+
+function estilizarTitulo(cell, size = 20) {
+  aplicarFonte(cell, size, false, "000000");
+  removerPreenchimento(cell);
+  cell.border = {};
+  cell.alignment = {
+    horizontal: "center",
+    vertical: "middle",
+  };
+}
+
+function estilizarCabecalho(
+  cell,
+  size = 12,
+  preenchimento = null
+) {
+  aplicarFonte(cell, size, false, "000000");
+
+  if (preenchimento) {
+    aplicarPreenchimento(cell, preenchimento);
+  } else {
+    removerPreenchimento(cell);
+  }
+
+  aplicarBordasHorizontais(cell);
+
+  cell.alignment = {
+    horizontal: "center",
+    vertical: "middle",
+    wrapText: true,
+  };
+}
+
+function estilizarRotulo(cell, bold = false) {
+  aplicarFonte(cell, 11, bold, "000000");
+  cell.border = {};
+  cell.alignment = {
+    horizontal: "left",
+    vertical: "middle",
+  };
+}
+
+function estilizarNumero(cell, bold = false) {
+  aplicarFonte(cell, 11, bold, "000000");
+  cell.border = {};
+  cell.numFmt = FORMATO_CONTABIL;
+  cell.alignment = {
+    horizontal: "right",
+    vertical: "middle",
+  };
+}
+
+function estilizarCelulaResumo(
+  cell,
+  bold = false,
+  preenchimento = null
+) {
+  aplicarFonte(cell, 11, bold, "000000");
+
+  if (preenchimento) {
+    aplicarPreenchimento(cell, preenchimento);
+  } else {
+    removerPreenchimento(cell);
+  }
+
+  aplicarBordasHorizontais(cell);
+}
+
+function estilizarValorResumo(
+  cell,
+  bold = false,
+  preenchimento = null
+) {
+  estilizarCelulaResumo(
+    cell,
+    bold,
+    preenchimento
+  );
+
+  cell.numFmt = FORMATO_RESUMO;
+
+  cell.alignment = {
+    horizontal: "right",
+    vertical: "middle",
+  };
+}
+
+function aplicarValor(cell, valor, bold = false) {
+  cell.value = numero(valor);
+  estilizarNumero(cell, bold);
+}
+
+function aplicarFormula(cell, formula, result, bold = false) {
+  cell.value = { formula, result: numero(result) };
+  estilizarNumero(cell, bold);
+}
+
+function aplicarPercentual(
+  cell,
+  coluna,
+  linhaFaturado,
+  linhaRecebido,
+  faturado,
+  recebido,
+  corPreenchimento
+) {
+  const resultado = faturado === 0 ? 0 : recebido / faturado;
+
+  cell.value = {
+    formula:
+      `IFERROR(${coluna}${linhaRecebido}/${coluna}${linhaFaturado},0)`,
+    result: resultado,
+  };
+
+  estilizarNumero(cell, true);
+  cell.numFmt = FORMATO_PERCENTUAL;
+  aplicarPreenchimento(cell, corPreenchimento);
+}
+
+function somaValoresConta(dados, conta, campo, mes) {
+  return numero(dados[conta.chaveDados]?.[campo]?.[mes]);
+}
+
+function montarBlocoCompetencia(sheet, config, ano, dados) {
+  const contasCaixa = obterContasCaixa(config);
+  const contasEncargos = contasCaixa.filter(
+    (conta) =>
+      !["aluguel", "condominio", "fundoPromocao"].includes(
+        conta.chaveDados
+      )
+  );
+  const contasPrincipais = obterContasPrincipais();
+
+  const layouts = {
+    padrao: {
+      linhaCabecalho: 5,
+      linhaInicialEncargos: 7,
+      linhaSubtotalEncargosFaturado: 28,
+      linhaSubtotalEncargosRecebido: 29,
+      linhaPercentualEncargos: 30,
+      linhasPrincipais: [32, 35, 38],
+      linhaSubtotalPrincipalFaturado: 41,
+      linhaSubtotalPrincipalRecebido: 42,
+      linhaPercentualPrincipal: 43,
+      linhaTotalGeralFaturado: 45,
+      linhaTotalGeralRecebido: 46,
+      linhaPercentualGeral: 47,
+    },
+    bh: {
+      linhaCabecalho: 5,
+      linhaInicialEncargos: 7,
+      linhaSubtotalEncargosFaturado: 31,
+      linhaSubtotalEncargosRecebido: 32,
+      linhaPercentualEncargos: 33,
+      linhasPrincipais: [35, 38, 41],
+      linhaSubtotalPrincipalFaturado: 44,
+      linhaSubtotalPrincipalRecebido: 45,
+      linhaPercentualPrincipal: 46,
+      linhaTotalGeralFaturado: 48,
+      linhaTotalGeralRecebido: 49,
+      linhaPercentualGeral: 50,
+    },
+  };
+
+  const layout = layouts[modeloLinhas(config)];
+
+function prepararLinhaTotal(linha, rotulo, cor) {
+  sheet.getCell(`B${linha}`).value = rotulo;
+  sheet.mergeCells(`B${linha}:C${linha}`);
+  estilizarRotulo(sheet.getCell(`B${linha}`), true);
+
+  for (let coluna = 2; coluna <= 15; coluna += 1) {
+    const cell = sheet.getCell(linha, coluna);
+
+    aplicarFonte(cell, 11, true, "000000");
+    aplicarPreenchimento(cell, cor);
+    aplicarBordasHorizontais(cell);
+  }
+}
+
+  function preencherConta(conta, linhaFaturado) {
+    const linhaRecebido = linhaFaturado + 1;
+
+    sheet.getCell(`B${linhaFaturado}`).value = conta.rotulo;
+    sheet.getCell(`B${linhaRecebido}`).value = null;
+    sheet.getCell(`C${linhaFaturado}`).value = "Faturado";
+    sheet.getCell(`C${linhaRecebido}`).value = "Recebido";
+
+    estilizarRotulo(sheet.getCell(`B${linhaFaturado}`));
+    estilizarRotulo(sheet.getCell(`B${linhaRecebido}`));
+    estilizarRotulo(sheet.getCell(`C${linhaFaturado}`));
+    estilizarRotulo(sheet.getCell(`C${linhaRecebido}`));
+
+    for (let mes = 0; mes < 12; mes += 1) {
+      aplicarValor(
+        sheet.getCell(linhaFaturado, 4 + mes),
+        somaValoresConta(dados, conta, "faturado", mes)
+      );
+
+      aplicarValor(
+        sheet.getCell(linhaRecebido, 4 + mes),
+        somaValoresConta(
+          dados,
+          conta,
+          "recebidoCompetencia",
+          mes
+        )
+      );
+    }
+aplicarContornoBloco(
+  sheet,
+  linhaFaturado,
+  linhaRecebido,
+  2,
+  15
+);
+    return {
+      linhaFaturado,
+      linhaRecebido,
+    };
+  }
+
+  // Título do bloco COMPETÊNCIA.
+  sheet.mergeCells("B2:O2");
+  sheet.getCell("B2").value =
+    `${config.nomeAba.toUpperCase()} - ${ano} - COMPETÊNCIA`;
+  estilizarTitulo(sheet.getCell("B2"));
+  sheet.getRow(2).height = 24;
+
+  // Cabeçalho na linha 5, conforme a referência.
+  sheet.getCell(`B${layout.linhaCabecalho}`).value = "Conta";
+  sheet.getCell(`C${layout.linhaCabecalho}`).value =
+    "Tipo de valor";
+
+estilizarCabecalho(
+  sheet.getCell(`B${layout.linhaCabecalho}`),
+  12
+);
+estilizarCabecalho(
+  sheet.getCell(`C${layout.linhaCabecalho}`),
+  12
+);
+
+  MESES.forEach((mes, index) => {
+    const cell = sheet.getCell(
+      layout.linhaCabecalho,
+      4 + index
+    );
+
+    cell.value = `${mes}/${ano}`;
+  estilizarCabecalho(cell, 12, COR_CINZA_CLARO);
+  });
+
+  // Contas de encargos, com uma linha vazia entre as contas.
+  const linhasFaturadoEncargos = [];
+  const linhasRecebidoEncargos = [];
+
+  contasEncargos.forEach((conta, index) => {
+    const linhaFaturado =
+      layout.linhaInicialEncargos + index * 3;
+
+    const linhasConta = preencherConta(conta, linhaFaturado);
+
+    linhasFaturadoEncargos.push(
+      linhasConta.linhaFaturado
+    );
+    linhasRecebidoEncargos.push(
+      linhasConta.linhaRecebido
+    );
+  });
+
+  prepararLinhaTotal(
+    layout.linhaSubtotalEncargosFaturado,
+    "Total Faturado",
+    COR_SUBTOTAL
+  );
+  prepararLinhaTotal(
+    layout.linhaSubtotalEncargosRecebido,
+    "Total Recebido",
+    COR_SUBTOTAL
+  );
+  prepararLinhaTotal(
+    layout.linhaPercentualEncargos,
+    "% Recebido/Faturado - Encargos",
+    COR_SUBTOTAL
+  );
+
+  for (let mes = 0; mes < 12; mes += 1) {
+    const coluna = colunaExcel(4 + mes);
+
+    const faturadoEncargos = contasEncargos.reduce(
+      (total, conta) =>
+        total +
+        somaValoresConta(dados, conta, "faturado", mes),
+      0
+    );
+
+    const recebidoEncargos = contasEncargos.reduce(
+      (total, conta) =>
+        total +
+        somaValoresConta(
+          dados,
+          conta,
+          "recebidoCompetencia",
+          mes
+        ),
+      0
+    );
+
+    const cellFaturado = sheet.getCell(
+      layout.linhaSubtotalEncargosFaturado,
+      4 + mes
+    );
+
+    aplicarFormula(
+      cellFaturado,
+      `SUM(${linhasFaturadoEncargos
+        .map((linha) => `${coluna}${linha}`)
+        .join(",")})`,
+      faturadoEncargos,
+      true
+    );
+    aplicarPreenchimento(cellFaturado, COR_SUBTOTAL);
+
+    const cellRecebido = sheet.getCell(
+      layout.linhaSubtotalEncargosRecebido,
+      4 + mes
+    );
+
+    aplicarFormula(
+      cellRecebido,
+      `SUM(${linhasRecebidoEncargos
+        .map((linha) => `${coluna}${linha}`)
+        .join(",")})`,
+      recebidoEncargos,
+      true
+    );
+    aplicarPreenchimento(cellRecebido, COR_SUBTOTAL);
+
+    aplicarPercentual(
+      sheet.getCell(
+        layout.linhaPercentualEncargos,
+        4 + mes
+      ),
+      coluna,
+      layout.linhaSubtotalEncargosFaturado,
+      layout.linhaSubtotalEncargosRecebido,
+      faturadoEncargos,
+      recebidoEncargos,
+      COR_SUBTOTAL
+    );
+  }
+
+  // Aluguel, Condomínio e Fundo de Promoção.
+  const linhasFaturadoPrincipais = [];
+  const linhasRecebidoPrincipais = [];
+
+  contasPrincipais.forEach((conta, index) => {
+    const linhasConta = preencherConta(
+      conta,
+      layout.linhasPrincipais[index]
+    );
+
+    linhasFaturadoPrincipais.push(
+      linhasConta.linhaFaturado
+    );
+    linhasRecebidoPrincipais.push(
+      linhasConta.linhaRecebido
+    );
+  });
+
+  // Subtotal intermediário do grupo de locação.
+  prepararLinhaTotal(
+    layout.linhaSubtotalPrincipalFaturado,
+    "Total Faturado",
+    COR_SUBTOTAL
+  );
+  prepararLinhaTotal(
+    layout.linhaSubtotalPrincipalRecebido,
+    "Total Recebido",
+    COR_SUBTOTAL
+  );
+  prepararLinhaTotal(
+    layout.linhaPercentualPrincipal,
+    "% Recebido/Faturado - Aluguel, Condomínio e FPP",
+    COR_SUBTOTAL
+  );
+
+  // Total geral.
+  prepararLinhaTotal(
+    layout.linhaTotalGeralFaturado,
+    "Total Faturado Geral",
+    COR_TOTAL
+  );
+  prepararLinhaTotal(
+    layout.linhaTotalGeralRecebido,
+    "Total Recebido Geral",
+    COR_TOTAL
+  );
+  prepararLinhaTotal(
+    layout.linhaPercentualGeral,
+    "% Recebido/Faturado Geral",
+    COR_TOTAL
+  );
+
+  for (let mes = 0; mes < 12; mes += 1) {
+    const coluna = colunaExcel(4 + mes);
+
+    const faturadoEncargos = contasEncargos.reduce(
+      (total, conta) =>
+        total +
+        somaValoresConta(dados, conta, "faturado", mes),
+      0
+    );
+
+    const recebidoEncargos = contasEncargos.reduce(
+      (total, conta) =>
+        total +
+        somaValoresConta(
+          dados,
+          conta,
+          "recebidoCompetencia",
+          mes
+        ),
+      0
+    );
+
+    const faturadoPrincipal = contasPrincipais.reduce(
+      (total, conta) =>
+        total +
+        somaValoresConta(dados, conta, "faturado", mes),
+      0
+    );
+
+    const recebidoPrincipal = contasPrincipais.reduce(
+      (total, conta) =>
+        total +
+        somaValoresConta(
+          dados,
+          conta,
+          "recebidoCompetencia",
+          mes
+        ),
+      0
+    );
+
+    const cellSubtotalFaturado = sheet.getCell(
+      layout.linhaSubtotalPrincipalFaturado,
+      4 + mes
+    );
+
+    aplicarFormula(
+      cellSubtotalFaturado,
+      `SUM(${linhasFaturadoPrincipais
+        .map((linha) => `${coluna}${linha}`)
+        .join(",")})`,
+      faturadoPrincipal,
+      true
+    );
+    aplicarPreenchimento(
+      cellSubtotalFaturado,
+      COR_SUBTOTAL
+    );
+
+    const cellSubtotalRecebido = sheet.getCell(
+      layout.linhaSubtotalPrincipalRecebido,
+      4 + mes
+    );
+
+    aplicarFormula(
+      cellSubtotalRecebido,
+      `SUM(${linhasRecebidoPrincipais
+        .map((linha) => `${coluna}${linha}`)
+        .join(",")})`,
+      recebidoPrincipal,
+      true
+    );
+    aplicarPreenchimento(
+      cellSubtotalRecebido,
+      COR_SUBTOTAL
+    );
+
+    aplicarPercentual(
+      sheet.getCell(
+        layout.linhaPercentualPrincipal,
+        4 + mes
+      ),
+      coluna,
+      layout.linhaSubtotalPrincipalFaturado,
+      layout.linhaSubtotalPrincipalRecebido,
+      faturadoPrincipal,
+      recebidoPrincipal,
+      COR_SUBTOTAL
+    );
+
+    const totalFaturado =
+      faturadoEncargos + faturadoPrincipal;
+    const totalRecebido =
+      recebidoEncargos + recebidoPrincipal;
+
+    const cellTotalFaturado = sheet.getCell(
+      layout.linhaTotalGeralFaturado,
+      4 + mes
+    );
+
+    aplicarFormula(
+      cellTotalFaturado,
+      `SUM(${coluna}${layout.linhaSubtotalEncargosFaturado},` +
+        `${coluna}${layout.linhaSubtotalPrincipalFaturado})`,
+      totalFaturado,
+      true
+    );
+    aplicarPreenchimento(
+      cellTotalFaturado,
+      COR_TOTAL
+    );
+
+    const cellTotalRecebido = sheet.getCell(
+      layout.linhaTotalGeralRecebido,
+      4 + mes
+    );
+
+    aplicarFormula(
+      cellTotalRecebido,
+      `SUM(${coluna}${layout.linhaSubtotalEncargosRecebido},` +
+        `${coluna}${layout.linhaSubtotalPrincipalRecebido})`,
+      totalRecebido,
+      true
+    );
+    aplicarPreenchimento(
+      cellTotalRecebido,
+      COR_TOTAL
+    );
+
+    aplicarPercentual(
+      sheet.getCell(
+        layout.linhaPercentualGeral,
+        4 + mes
+      ),
+      coluna,
+      layout.linhaTotalGeralFaturado,
+      layout.linhaTotalGeralRecebido,
+      totalFaturado,
+      totalRecebido,
+      COR_TOTAL
+    );
+  }
+}
+
+function criarMapaValoresCaixa(config, dados) {
+  const linhas = LINHAS_CAIXA[modeloLinhas(config)];
+  const contas = obterContasCaixa(config);
+  const valoresPorLinha = new Map();
+
+  contas.forEach((conta) => {
+    valoresPorLinha.set(
+      linhas[conta.chaveLinha],
+      criarVetorMensal().map((_, mes) => numero(dados[conta.chaveDados]?.caixa?.[mes]))
+    );
+  });
+
+  valoresPorLinha.set(
+    linhas.total,
+    criarVetorMensal().map((_, mes) =>
+      contas.reduce(
+        (total, conta) => total + numero(dados[conta.chaveDados]?.caixa?.[mes]),
+        0
+      )
+    )
+  );
+
+  return valoresPorLinha;
+}
+
+function montarBlocoCaixa(
+  sheet,
+  config,
+  ano,
+  dados,
+  valoresPorLinha
+) {
+  const modelo = modeloLinhas(config);
+  const linhas = LINHAS_CAIXA[modelo];
+  const contas = obterContasCaixa(config);
+
+  const linhaTitulo =
+    linhas.taxaAdministracao - 2;
+
+  const linhaCabecalho =
+    linhas.taxaAdministracao - 1;
+
+  /*
+   * Título do bloco CAIXA.
+   * O bloco termina na coluna O: Janeiro a Dezembro.
+   */
+  sheet.mergeCells(
+    `B${linhaTitulo}:O${linhaTitulo}`
+  );
+
+  sheet.getCell(`B${linhaTitulo}`).value =
+    `${config.nomeAba.toUpperCase()} - ` +
+    `${ano} - CAIXA`;
+
+  estilizarTitulo(
+    sheet.getCell(`B${linhaTitulo}`)
+  );
+
+  sheet.getRow(linhaTitulo).height = 24;
+
+  /*
+   * Cabeçalho.
+   */
+  sheet.getCell(`B${linhaCabecalho}`).value =
+    "Conta";
+
+  sheet.getCell(`C${linhaCabecalho}`).value =
+    "Tipo de valor";
+
+  estilizarCabecalho(
+    sheet.getCell(`B${linhaCabecalho}`),
+    12
+  );
+
+  estilizarCabecalho(
+    sheet.getCell(`C${linhaCabecalho}`),
+    12
+  );
+
+  /*
+   * Meses do CAIXA: somente Janeiro a Dezembro.
+   */
+  MESES.forEach((mes, index) => {
+    const cell = sheet.getCell(
+      linhaCabecalho,
+      4 + index
+    );
+
+    cell.value = mes;
+
+    estilizarCabecalho(
+      cell,
+      10,
+      COR_CINZA_CAIXA
+    );
+  });
+
+  /*
+   * Contas do CAIXA.
+   */
+  contas.forEach((conta) => {
+    const linha = linhas[conta.chaveLinha];
+
+    sheet.getCell(`B${linha}`).value =
+      conta.rotulo;
+
+    sheet.getCell(`C${linha}`).value =
+      "Recebimento do Mês";
+
+    estilizarRotulo(
+      sheet.getCell(`B${linha}`)
+    );
+
+    estilizarRotulo(
+      sheet.getCell(`C${linha}`)
+    );
+
+    const valores =
+      valoresPorLinha.get(linha) ||
+      criarVetorMensal();
+
+    for (let mes = 0; mes < 12; mes += 1) {
+      aplicarValor(
+        sheet.getCell(linha, 4 + mes),
+        valores[mes]
+      );
+    }
+
+    /*
+     * Somente o contorno externo da linha.
+     */
+    aplicarContornoBloco(
+      sheet,
+      linha,
+      linha,
+      2,
+      15
+    );
+  });
+
+  /*
+   * Linha TOTAL.
+   */
+  sheet.getCell(`B${linhas.total}`).value =
+    "TOTAL";
+
+  sheet.getCell(`C${linhas.total}`).value =
+    "Recebimento do Mês";
+
+  estilizarRotulo(
+    sheet.getCell(`B${linhas.total}`),
+    true
+  );
+
+  estilizarRotulo(
+    sheet.getCell(`C${linhas.total}`),
+    true
+  );
+
+  /*
+   * Fórmulas do TOTAL: Janeiro a Dezembro.
+   */
+  for (let mes = 0; mes < 12; mes += 1) {
+    const coluna = colunaExcel(4 + mes);
+
+    const referencias = contas
+      .map(
+        (conta) =>
+          `${coluna}${linhas[conta.chaveLinha]}`
+      )
+      .join(",");
+
+    const total = numero(
+      valoresPorLinha.get(linhas.total)?.[mes]
+    );
+
+    const cell = sheet.getCell(
+      linhas.total,
+      4 + mes
+    );
+
+    aplicarFormula(
+      cell,
+      `SUM(${referencias})`,
+      total,
+      true
+    );
+  }
+
+  /*
+   * Formatação cinza do TOTAL,
+   * somente com bordas superior e inferior.
+   */
+  for (let coluna = 2; coluna <= 15; coluna += 1) {
+    const cell = sheet.getCell(
+      linhas.total,
+      coluna
+    );
+
+    aplicarFonte(
+      cell,
+      11,
+      true,
+      "000000"
+    );
+
+    aplicarPreenchimento(
+      cell,
+      COR_TOTAL
+    );
+
+    aplicarBordasHorizontais(cell);
+  }
 }
 
 function montarAbaFonte(workbook, config, ano, dados) {
   const nomeAba = `${config.nomeAba} ${ano}`;
-  const sheet = workbook.addWorksheet(nomeAba);
+  const sheet = workbook.addWorksheet(nomeAba, {
+    properties: { tabColor: { argb: COR_CINZA_CLARO } },
+  });
+  const valoresPorLinha = criarMapaValoresCaixa(config, dados);
 
-  sheet.views = [{ showGridLines: false, state: "frozen", ySplit: 3 }];
-  sheet.getColumn("B").width = 32;
-  sheet.getColumn("C").width = 24;
+  sheet.views = [{ showGridLines: false, state: "frozen", ySplit: 5 }];
+  sheet.pageSetup = {
+    orientation: "landscape",
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+  };
+  sheet.getColumn("A").width = 3;
+  sheet.getColumn("B").width = 29;
+  sheet.getColumn("C").width = 21;
 
-  for (let coluna = 4; coluna <= 16; coluna += 1) {
-    sheet.getColumn(coluna).width = 15;
+  for (let coluna = 4; coluna <= 15; coluna += 1) {
+    sheet.getColumn(coluna).width = 15.89;
   }
 
   montarBlocoCompetencia(sheet, config, ano, dados);
-  montarBlocoCaixa(sheet, config, ano, dados);
+  montarBlocoCaixa(sheet, config, ano, dados, valoresPorLinha);
 
   return {
     nomeAba,
     config,
     ano,
     dados,
+    valoresPorLinha,
   };
 }
 
-function montarBlocoCaixa(sheet, config, ano, dados) {
-  const modelo = config.modelo === "bh" ? "bh" : "padrao";
-  const linhas = LINHAS_CAIXA[modelo];
+function somarResultadosFonte(fonte, linhas, mes) {
+  return linhas.reduce(
+    (total, linha) => total + numero(fonte.valoresPorLinha.get(linha)?.[mes]),
+    0
+  );
+}
 
-  const linhaPrimeiraConta =
-    modelo === "bh"
-      ? linhas.taxaAdministracao
-      : linhas.taxaAdministracao;
+function preencherColunaResumo(
+  sheet,
+  fonte,
+  linhaBloco,
+  colunaResumo,
+  mes
+) {
+  const modelo = modeloLinhas(fonte.config);
+  const mapa = LINHAS_RESUMO[modelo];
+  const colunaFonte = colunaExcel(4 + mes);
+  const nomeAba = fonte.nomeAba;
 
-  const linhaTitulo = linhaPrimeiraConta - 2;
-  const linhaCabecalho = linhaPrimeiraConta - 1;
-
-  sheet.getCell(`B${linhaTitulo}`).value =
-    `${config.nomeAba.toUpperCase()} - ${ano} - CAIXA`;
-
-  sheet.getCell(`B${linhaCabecalho}`).value = "Conta";
-  sheet.getCell(`C${linhaCabecalho}`).value = "Tipo de valor";
-
-  const meses = [
-    "Janeiro", "Fevereiro", "Março", "Abril",
-    "Maio", "Junho", "Julho", "Agosto",
-    "Setembro", "Outubro", "Novembro", "Dezembro",
+  const categorias = [
+    ["Aluguel", mapa.aluguel],
+    ["Condomínio", mapa.condominio],
+    ["FPP", mapa.fpp],
+    ["Outras receitas", mapa.outrasReceitas],
+    ["Específicos", mapa.especificos],
   ];
 
-  meses.forEach((mes, index) => {
-    sheet.getCell(linhaCabecalho, 4 + index).value = mes;
+  categorias.forEach(([rotulo, linhas], index) => {
+    const linha = linhaBloco + 1 + index;
+    const resultado = somarResultadosFonte(
+      fonte,
+      linhas,
+      mes
+    );
+
+    const cellRotulo = sheet.getCell(linha, 2);
+    const cellValor = sheet.getCell(
+      linha,
+      colunaResumo
+    );
+
+    cellRotulo.value = rotulo;
+    estilizarRotulo(cellRotulo);
+    estilizarCelulaResumo(cellRotulo);
+
+    aplicarFormula(
+      cellValor,
+      formulaSomaFonte(
+        nomeAba,
+        colunaFonte,
+        linhas
+      ),
+      resultado
+    );
+
+    estilizarValorResumo(cellValor);
   });
 
-  sheet.getCell(linhaCabecalho, 16).value =
-    `Janeiro/${Number(ano) + 1}`;
+  const linhaTotal = linhaBloco + 6;
+  const linhaValidacao = linhaBloco + 7;
+  const letraResumo = colunaExcel(colunaResumo);
 
-  const contas =
-    modelo === "bh"
-      ? [
-          ["taxaAdministracao", "Taxa de Administração"],
-          ["fundoReserva", "Fundo de Reserva"],
-          ["agua", "Água e Esgoto"],
-          ["energia", "Energia Elétrica"],
-          ["iptu", "IPTU"],
-          ["arCondicionado", "Ar Condicionado"],
-          ["marketing", "Marketing Comemorativo"],
-          ["outrasReceitas", "Outras Receitas"],
-          ["aluguel", "Aluguel"],
-          ["condominio", "Condomínio"],
-          ["fundoPromocao", "Fundo de Promoção"],
-        ]
-      : [
-          ["taxaAdministracao", "Taxa de Administração"],
-          ["fundoReserva", "Fundo de Reserva"],
-          [
-            "aguaOuGas",
-            config.modelo === "aviao"
-              ? "Água e Esgoto"
-              : config.nomeAba.includes("Guarulhos")
-                ? "Gás"
-                : "Água e Esgoto",
-          ],
-          ["energia", "Energia Elétrica"],
-          [
-            "marketingOuIptu",
-            config.modelo === "aviao"
-              ? "IPTU"
-              : "Marketing Comemorativo",
-          ],
-          [
-            "iptuOuFpp",
-            config.modelo === "aviao"
-              ? "FPP/Feirão"
-              : "IPTU",
-          ],
-          ["outrasReceitas", "Outras Receitas"],
-          ["aluguel", "Aluguel"],
-          ["condominio", "Condomínio"],
-          ["fundoPromocao", "Fundo de Promoção"],
-        ];
+  const resultadoTotal = categorias.reduce(
+    (total, [, linhas]) =>
+      total +
+      somarResultadosFonte(fonte, linhas, mes),
+    0
+  );
 
-  contas.forEach(([chaveLinha, rotulo]) => {
-    const linha = linhas[chaveLinha];
+  const resultadoFonte = somarResultadosFonte(
+    fonte,
+    [mapa.total],
+    mes
+  );
 
-    sheet.getCell(`B${linha}`).value = rotulo;
-    sheet.getCell(`C${linha}`).value = "Recebimento do Mês";
+  const validacao =
+    Math.abs(resultadoTotal - resultadoFonte) <= 0.01;
 
-    const chaveDados = converterChaveDados(config, chaveLinha);
+  /*
+   * Linha de total.
+   */
+  const cellRotuloTotal = sheet.getCell(
+    linhaTotal,
+    2
+  );
 
-    for (let mes = 0; mes < 12; mes += 1) {
-      aplicarValor(
-        sheet.getCell(linha, 4 + mes),
-        dados[chaveDados]?.caixa[mes]
-      );
-    }
+  const cellValorTotal = sheet.getCell(
+    linhaTotal,
+    colunaResumo
+  );
 
-    aplicarValor(sheet.getCell(linha, 16), 0);
-  });
+  cellRotuloTotal.value = "Total";
+  estilizarRotulo(cellRotuloTotal, true);
 
-  sheet.getCell(`B${linhas.total}`).value = "TOTAL";
-  sheet.getCell(`C${linhas.total}`).value = "Recebimento do Mês";
+  estilizarCelulaResumo(
+    cellRotuloTotal,
+    true,
+    COR_TOTAL
+  );
 
-  for (let coluna = 4; coluna <= 16; coluna += 1) {
-    const letra = colunaExcel(coluna);
-    const referencias = contas
-      .map(([chaveLinha]) => `${letra}${linhas[chaveLinha]}`)
-      .join(",");
+  aplicarFormula(
+    cellValorTotal,
+    `SUM(${letraResumo}${linhaBloco + 1}:` +
+      `${letraResumo}${linhaBloco + 5})`,
+    resultadoTotal,
+    true
+  );
 
-    sheet.getCell(linhas.total, coluna).value = {
-      formula: `SUM(${referencias})`,
-      result: contas.reduce((total, [chaveLinha]) => {
-        const chaveDados = converterChaveDados(config, chaveLinha);
-        const mes = coluna - 4;
+estilizarValorResumo(
+  cellValorTotal,
+  true,
+  COR_TOTAL
+);
 
-        return total + numero(dados[chaveDados]?.caixa[mes]);
-      }, 0),
-    };
+  /*
+   * Linha de validação.
+   */
+  const cellRotuloValidacao = sheet.getCell(
+    linhaValidacao,
+    2
+  );
 
-    sheet.getCell(linhas.total, coluna).numFmt = '#,##0.00';
-  }
-}
+  const cellValorValidacao = sheet.getCell(
+    linhaValidacao,
+    colunaResumo
+  );
 
-function converterChaveDados(config, chaveLinha) {
-  const mapa = {
-    taxaAdministracao: "taxaAdministracao",
-    fundoReserva: "fundoReserva",
-    energia: "energia",
-    outrasReceitas: "outrasReceitas",
-    aluguel: "aluguel",
-    condominio: "condominio",
-    fundoPromocao: "fundoPromocao",
-    arCondicionado: "arCondicionado",
-    marketing: "marketing",
-    iptu: "iptu",
-    agua: "agua",
+  cellRotuloValidacao.value = "Validação";
+  estilizarRotulo(cellRotuloValidacao, true);
+
+  cellValorValidacao.value = {
+    formula:
+      `${letraResumo}${linhaTotal}=` +
+      referenciaFonte(
+        nomeAba,
+        colunaFonte,
+        mapa.total
+      ),
+    result: validacao,
   };
 
-  if (chaveLinha === "aguaOuGas") {
-    return config.nomeAba.includes("Guarulhos") ? "gas" : "agua";
-  }
+  estilizarCelulaResumo(
+    cellRotuloValidacao,
+    true,
+    COR_VALIDACAO
+  );
 
-  if (chaveLinha === "marketingOuIptu") {
-    return config.modelo === "aviao" ? "iptu" : "marketing";
-  }
+  estilizarCelulaResumo(
+    cellValorValidacao,
+    false,
+    COR_VALIDACAO
+  );
 
-  if (chaveLinha === "iptuOuFpp") {
-    return config.modelo === "aviao" ? "fppAviao" : "iptu";
-  }
-
-  return mapa[chaveLinha] || chaveLinha;
+  cellValorValidacao.alignment = {
+    horizontal: "center",
+    vertical: "middle",
+  };
 }
 
-function montarResumo(workbook, fontes, anos) {
-  const sheet = workbook.addWorksheet("Resumo", {
-    properties: { tabColor: { argb: "4472C4" } },
-  });
+function montarResumo(sheet, fontes, anos) {
+  sheet.views = [
+    {
+      showGridLines: false,
+      state: "frozen",
+      xSplit: 2,
+      ySplit: 1,
+    },
+  ];
 
-  sheet.views = [{ showGridLines: false, state: "frozen", xSplit: 2 }];
-  sheet.getColumn("B").width = 24;
+  sheet.pageSetup = {
+    orientation: "landscape",
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+  };
+
+  sheet.getColumn("A").width = 3;
+  sheet.getColumn("B").width = 22;
 
   const empreendimentos = [
     ...new Map(
-      fontes.map((fonte) => [fonte.config.nomeAba, fonte.config])
+      fontes.map((fonte) => [
+        fonte.config.nomeAba,
+        fonte.config,
+      ])
     ).values(),
-  ];
+  ].sort(
+    (a, b) =>
+      Number(a.ordemResumo || 999) -
+      Number(b.ordemResumo || 999)
+  );
 
   let linhaBloco = 2;
 
   empreendimentos.forEach((config) => {
-    sheet.getCell(linhaBloco, 2).value = config.tituloResumo;
+    const cellTitulo = sheet.getCell(
+      linhaBloco,
+      2
+    );
+
+    cellTitulo.value = config.tituloResumo;
+
+    estilizarTitulo(
+      cellTitulo,
+      11
+    );
+
+    aplicarBordasHorizontais(cellTitulo);
 
     anos.forEach((ano, indiceAno) => {
       for (let mes = 0; mes < 12; mes += 1) {
-        const colunaResumo = 3 + indiceAno * 12 + mes;
+        const colunaResumo =
+          3 + indiceAno * 12 + mes;
+
         const fonte = fontes.find(
           (item) =>
-            item.config.nomeAba === config.nomeAba &&
+            item.config.nomeAba ===
+              config.nomeAba &&
             String(item.ano) === String(ano)
         );
 
-        sheet.getCell(linhaBloco, colunaResumo).value =
-          new Date(Number(ano), mes, 1);
-        sheet.getCell(linhaBloco, colunaResumo).numFmt = "mmm/yyyy";
+        const cabecalho = sheet.getCell(
+          linhaBloco,
+          colunaResumo
+        );
+
+        cabecalho.value = new Date(
+          Number(ano),
+          mes,
+          1
+        );
+
+        cabecalho.numFmt = "mmm/yy";
+
+        estilizarCabecalho(
+          cabecalho,
+          11,
+          COR_CINZA_CLARO
+        );
+
+        sheet.getColumn(
+          colunaResumo
+        ).width = 15.89;
 
         if (fonte) {
           preencherColunaResumo(
@@ -490,70 +1589,32 @@ function montarResumo(workbook, fontes, anos) {
 
     linhaBloco += 9;
   });
-
-  return sheet;
-}
-function preencherColunaResumo(
-  sheet,
-  fonte,
-  linhaBloco,
-  colunaResumo,
-  mes
-) {
-  const modelo =
-    fonte.config.modelo === "bh" ? "bh" : "padrao";
-
-  const mapa = LINHAS_RESUMO[modelo];
-  const colunaFonte = colunaExcel(4 + mes);
-  const nomeAba = fonte.nomeAba;
-
-  const categorias = [
-    ["Aluguel", mapa.aluguel],
-    ["Condomínio", mapa.condominio],
-    ["FPP", mapa.fpp],
-    ["Outras receitas", mapa.outrasReceitas],
-    ["Específicos", mapa.especificos],
-  ];
-
-  categorias.forEach(([rotulo, linhas], index) => {
-    const linha = linhaBloco + 1 + index;
-    sheet.getCell(linha, 2).value = rotulo;
-
-    sheet.getCell(linha, colunaResumo).value = {
-      formula: formulaSomaFonte(nomeAba, colunaFonte, linhas),
-      result: somarResultadosFonte(fonte, linhas, mes),
-    };
-
-    sheet.getCell(linha, colunaResumo).numFmt = '#,##0.00';
-  });
-
-  const linhaTotal = linhaBloco + 6;
-  const linhaValidacao = linhaBloco + 7;
-  const letraResumo = colunaExcel(colunaResumo);
-
-  sheet.getCell(linhaTotal, 2).value = "Total";
-  sheet.getCell(linhaTotal, colunaResumo).value = {
-    formula: `SUM(${letraResumo}${linhaBloco + 1}:${letraResumo}${linhaBloco + 5})`,
-    result: categorias.reduce(
-      (total, [, linhas]) =>
-        total + somarResultadosFonte(fonte, linhas, mes),
-      0
-    ),
-  };
-
-  sheet.getCell(linhaValidacao, 2).value = "Validação";
-  sheet.getCell(linhaValidacao, colunaResumo).value = {
-    formula:
-      `${letraResumo}${linhaTotal}=` +
-      referenciaFonte(nomeAba, colunaFonte, mapa.total),
-    result: true,
-  };
 }
 
-async function gerarWorkbookDetalhado(pool, query) {
+function validarEscopoShopping(shoppingIds, shoppingIdsPermitidos) {
+  if (!Array.isArray(shoppingIdsPermitidos)) return;
+
+  const permitidos = new Set(
+    shoppingIdsPermitidos.map((id) => String(id))
+  );
+  const naoAutorizados = shoppingIds.filter(
+    (id) => !permitidos.has(String(id))
+  );
+
+  if (naoAutorizados.length) {
+    const error = new Error(
+      "Um ou mais shoppings selecionados não estão autorizados."
+    );
+    error.statusCode = 403;
+    throw error;
+  }
+}
+
+function validarParametros(query, shoppingIdsPermitidos) {
   const shoppingIds = splitParam(query.shopping);
-  const anos = splitParam(query.anos)
-    .sort((a, b) => Number(a) - Number(b));
+  const anos = splitParam(query.anos).sort(
+    (a, b) => Number(a) - Number(b)
+  );
 
   if (!shoppingIds.length) {
     const error = new Error("Selecione pelo menos um shopping.");
@@ -567,25 +1628,51 @@ async function gerarWorkbookDetalhado(pool, query) {
     throw error;
   }
 
+  const anosInvalidos = anos.filter(
+    (ano) => !/^\d{4}$/.test(ano) || Number(ano) < 2000 || Number(ano) > 2100
+  );
+
+  if (anosInvalidos.length) {
+    const error = new Error("Um ou mais anos selecionados são inválidos.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  validarEscopoShopping(shoppingIds, shoppingIdsPermitidos);
+
   const invalidos = shoppingIds.filter(
     (id) => !SHOPPINGS_DETALHADO[id]
   );
 
   if (invalidos.length) {
     const error = new Error(
-      "O relatório detalhado está disponível somente para os Outlets e o Shopping do Avião."
+      "O relatório detalhado está disponível somente para Só Marcas Contagem, Só Marcas Guarulhos, BH Outlet e Shopping do Avião."
     );
     error.statusCode = 400;
     throw error;
   }
 
-  const workbook = new ExcelJS.Workbook();
+  return { shoppingIds, anos };
+}
 
+async function gerarWorkbookDetalhado(
+  pool,
+  query,
+  shoppingIdsPermitidos = null
+) {
+  const { shoppingIds, anos } = validarParametros(
+    query,
+    shoppingIdsPermitidos
+  );
+  const workbook = new ExcelJS.Workbook();
   workbook.creator = "Portal GMV";
   workbook.created = new Date();
   workbook.calcProperties.fullCalcOnLoad = true;
   workbook.calcProperties.forceFullCalc = true;
 
+  const resumo = workbook.addWorksheet("Resumo", {
+    properties: { tabColor: { argb: COR_CINZA_CLARO } },
+  });
   const fontes = [];
 
   for (const shoppingId of shoppingIds) {
@@ -597,17 +1684,13 @@ async function gerarWorkbookDetalhado(pool, query) {
         shoppingId,
         ano
       );
-
       const dados = agruparLancamentos(lancamentos, ano);
-
-      fontes.push(
-        montarAbaFonte(workbook, config, ano, dados)
-      );
+      fontes.push(montarAbaFonte(workbook, config, ano, dados));
     }
   }
 
-  montarResumo(workbook, fontes, anos);
-  workbook.getWorksheet("Resumo").orderNo = 1;
+  montarResumo(resumo, fontes, anos);
+  workbook.views = [{ activeTab: 0 }];
 
   return workbook;
 }
@@ -616,5 +1699,3 @@ module.exports = {
   gerarWorkbookDetalhado,
   SHOPPINGS_DETALHADO,
 };
-
-// TESTE//

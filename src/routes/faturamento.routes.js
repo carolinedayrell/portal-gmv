@@ -5,6 +5,9 @@ const {
   authMiddleware,
   shoppingScopeMiddleware,
 } = require("../middlewares/auth");
+const {
+  gerarWorkbookDetalhado,
+} = require("../services/faturado-recebido-detalhado.service");
 
 const router = express.Router();
 
@@ -986,6 +989,19 @@ function competenciaMes(ano, mesZeroBased) {
   return `${String(data.getMonth() + 1).padStart(2, "0")}/${data.getFullYear()}`;
 }
 
+function obterUltimoDiaUtil(dataBase = new Date()) {
+  const data = new Date(dataBase);
+
+  data.setHours(0, 0, 0, 0);
+  data.setDate(data.getDate() - 1);
+
+  while (data.getDay() === 0 || data.getDay() === 6) {
+    data.setDate(data.getDate() - 1);
+  }
+
+  return data;
+}
+
 async function buscarValoresMensaisAgregados({ shoppingId, competencias }) {
   const result = await pool.query(
     `
@@ -1134,7 +1150,7 @@ async function buscarDadosFaturadoRecebidoExcel(ano, query, shopping) {
     ano,
  shopping: shopping.nome,
 shoppingId: shopping.id,
-    atualizadoAte: new Date(),
+    atualizadoAte: obterUltimoDiaUtil(),
     mesAtual: recebimentoMesAtual.mesReferencia,
     recebimentoMesAtual,
 mensal: {
@@ -1673,5 +1689,40 @@ for (const ano of anos) {
     });
   }
 });
+
+router.get(
+  "/gerar-tabelas/faturado-recebido-detalhado",
+  async (req, res) => {
+    try {
+      const workbook = await gerarWorkbookDetalhado(
+        pool,
+        req.query,
+        req.shoppingScope.shoppingIds
+      );
+
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        'attachment; filename="faturado-x-recebido-detalhado.xlsx"'
+      );
+
+      await workbook.xlsx.write(res);
+      res.end();
+    } catch (error) {
+      console.error(
+        "Erro ao gerar Faturado x Recebido - Detalhado:",
+        error
+      );
+      res.status(error.statusCode || 500).json({
+        message:
+          error.message ||
+          "Erro ao gerar Faturado x Recebido - Detalhado.",
+      });
+    }
+  }
+);
 
 module.exports = router;
