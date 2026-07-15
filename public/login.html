@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login - Portal GMV</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <main class="login-page">
+      <section class="login-card">
+        <div class="brand">
+          <img src="/img/logo.jpg" alt="GMV" />
+        </div>
+
+        <h1>Acesso ao Portal</h1>
+        <p>Informe suas credenciais para continuar.</p>
+
+        <form id="loginForm">
+          <label for="email">E-mail</label>
+          <input id="email" type="email" autocomplete="email" required />
+
+          <label for="senha">Senha</label>
+          <input id="senha" type="password" autocomplete="current-password" required />
+
+          <button type="submit">Entrar</button>
+        </form>
+
+        <p id="mensagem" class="message"></p>
+      </section>
+    </main>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/login.js"></script>
+  </body>
+</html>

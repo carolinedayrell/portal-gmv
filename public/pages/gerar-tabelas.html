@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Geração de Tabelas - Faturamento</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <aside id="sidebar" class="sidebar"></aside>
+
+    <main class="content">
+      <header class="page-header">
+        <div>
+          <h2>Geração de Tabelas</h2>
+          <p>Gere arquivos Excel de faturamento conforme os filtros selecionados.</p>
+        </div>
+      </header>
+
+      <section class="panel filters-panel faturamento-filters">
+        <div class="filter-dropdown">
+          <button type="button" class="filter-button">Shopping</button>
+          <div class="filter-options">
+            <input id="shoppingBusca" class="filter-search" type="text" placeholder="Buscar shopping" />
+            <div id="shoppingFiltro"></div>
+          </div>
+        </div>
+
+        <div class="filter-dropdown">
+          <button type="button" class="filter-button">Tipo</button>
+          <div class="filter-options">
+            <input id="tipoBusca" class="filter-search" type="text" placeholder="Buscar tipo" />
+            <div id="tipoFiltro"></div>
+          </div>
+        </div>
+
+        <div class="filter-dropdown">
+          <button type="button" class="filter-button">Tipo Loja</button>
+          <div class="filter-options">
+            <input id="tipoLojaBusca" class="filter-search" type="text" placeholder="Buscar tipo loja" />
+            <div id="tipoLojaFiltro"></div>
+          </div>
+        </div>
+
+        <div class="filter-dropdown">
+          <button type="button" class="filter-button">Ano</button>
+          <div class="filter-options">
+            <input id="anoBusca" class="filter-search" type="text" placeholder="Buscar ano" />
+            <div id="anoFiltro"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="table-actions">
+          <button id="gerarFaturadoRecebidoButton" type="button">
+            Faturado x Recebido
+          </button>
+
+          <button id="gerarFaturadoRecebidoDetalhadoButton" type="button">
+            Faturado x Recebido - Detalhado
+          </button>
+        </div>
+
+        <p id="geracaoMensagem" class="message"></p>
+      </section>
+    </main>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/menu.js"></script>
+    <script src="/js/main.js"></script>
+    <script src="/js/pages/gerar-tabelas.js"></script>
+  </body>
+</html>

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shoppings - Portal GMV</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <aside id="sidebar" class="sidebar"></aside>
+
+    <main class="content">
+      <header class="page-header">
+        <div>
+          <h2>Shoppings</h2>
+          <p>Faça o de/para entre GROUP e Coligada TOTVS.</p>
+        </div>
+      </header>
+
+      <section class="panel filters-panel">
+        <input id="buscaInput" type="text" placeholder="Buscar shopping, GROUP, CNPJ ou coligada" />
+        <button id="filtrarButton" type="button">Filtrar</button>
+      </section>
+
+      <section class="panel">
+        <table>
+          <thead>
+            <tr>
+              <th>Shopping</th>
+              <th>GROUP</th>
+              <th>CNPJ GROUP DESATUALIZADO</th>
+              <th>CNPJ TOTVS</th>
+              <th>Coligada TOTVS</th>
+              <th>Nome Reduzido</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="shoppingsTableBody">
+            <tr>
+              <td colspan="7">Carregando...</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+
+    <div id="shoppingModal" class="modal" hidden>
+      <div class="modal-content">
+        <header class="modal-header">
+          <h3>Editar Shopping</h3>
+          <button id="fecharModalButton" type="button">Fechar</button>
+        </header>
+
+        <form id="shoppingForm">
+          <input id="numShoppingInput" type="hidden" />
+
+          <label>Shopping</label>
+          <input id="nomeShoppingInput" type="text" disabled />
+
+          <label>GROUP</label>
+          <input id="groupInput" type="text" disabled />
+
+          <label>CNPJ GROUP DESATUALIZADO</label>
+<input id="cnpjInput" type="text" disabled />
+
+<label for="cnpjTotvsInput">CNPJ TOTVS</label>
+<input
+  id="cnpjTotvsInput"
+  type="text"
+  maxlength="18"
+  placeholder="XX.XXX.XXX/XXXX-XX"
+/>
+
+          <label for="coligadaTotvsInput">Coligada TOTVS</label>
+          <input id="coligadaTotvsInput" type="text" />
+
+          <label for="nomeReduzidoInput">Nome Reduzido da Coligada</label>
+          <input id="nomeReduzidoInput" type="text" />
+
+          <button type="submit">Salvar Alterações</button>
+          <p id="shoppingMensagem" class="message"></p>
+        </form>
+      </div>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/menu.js"></script>
+    <script src="/js/main.js"></script>
+    <script src="/js/pages/shoppings.js"></script>
+  </body>
+</html>

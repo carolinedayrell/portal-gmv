@@ -1,0 +1,142 @@
+﻿<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relatórios - Faturamento</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <aside id="sidebar" class="sidebar"></aside>
+
+    <main class="content">
+      <header class="page-header">
+        <div>
+          <h2>Faturamento</h2>
+          <p>Relatório por shopping, loja, contrato e tipo.</p>
+          <p id="faturamentoCacheInfo" class="cache-info">Última atualização: -</p>
+        </div>
+        <button id="atualizarCacheButton" type="button" hidden>Atualizar base</button>
+      </header>
+
+      <section class="panel filters-panel faturamento-filters">
+        <div class="filter-dropdown">
+          <button type="button" class="filter-button">Shopping</button>
+          <div class="filter-options">
+            <input id="shoppingBusca" class="filter-search" type="text" placeholder="Buscar shopping" />
+            <div id="shoppingFiltro"></div>
+          </div>
+        </div>
+
+        <div class="filter-dropdown">
+          <button type="button" class="filter-button">Loja</button>
+          <div class="filter-options">
+            <input id="lojaBusca" class="filter-search" type="text" placeholder="Buscar loja" />
+            <div id="lojaFiltro"></div>
+          </div>
+        </div>
+
+        <div class="filter-dropdown">
+          <button type="button" class="filter-button">Tipo</button>
+          <div class="filter-options">
+            <input id="tipoBusca" class="filter-search" type="text" placeholder="Buscar tipo" />
+            <div id="tipoFiltro"></div>
+          </div>
+        </div>
+
+        <div class="filter-dropdown">
+          <button type="button" class="filter-button">Tipo Loja</button>
+          <div class="filter-options">
+            <input id="tipoLojaBusca" class="filter-search" type="text" placeholder="Buscar tipo loja" />
+            <div id="tipoLojaFiltro"></div>
+          </div>
+        </div>
+
+        <div class="filter-dropdown">
+          <button type="button" class="filter-button">Competência</button>
+          <div class="filter-options">
+            <input id="competenciaBusca" class="filter-search" type="text" placeholder="Buscar Competência" />
+            <div id="competenciaFiltro"></div>
+          </div>
+        </div>
+
+<div class="filter-dropdown">
+  <button type="button" class="filter-button">ID Lançamento</button>
+  <div class="filter-options">
+    <input id="idlancamentoBusca" class="filter-search" type="text" placeholder="Buscar ID Lançamento" />
+    <div id="idlancamentoFiltro"></div>
+  </div>
+</div>
+
+        <button id="filtrarButton" class="filter-submit" type="button">Filtrar</button>
+      </section>
+
+      <section class="summary-grid">
+        <div class="panel">
+          <strong>Faturado</strong>
+          <p id="valorFaturado">R$ 0,00</p>
+        </div>
+
+        <div class="panel">
+          <strong>Recebido</strong>
+          <p id="valorRecebido">R$ 0,00</p>
+        </div>
+
+        <div class="panel">
+          <strong>% Recebimento</strong>
+          <p id="percentualRecebimento">0%</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="table-actions">
+          <button id="colunasButton" type="button">Colunas</button>
+          <button id="exportarExcelButton" type="button">Exportar Excel</button>
+        </div>
+
+        <div id="colunasPanel" class="columns-panel" hidden></div>
+
+        <table id="faturamentoTable">
+          <thead>
+            <tr>
+              <th data-col="competencia">Competência</th>
+              <th data-col="shopping">Shopping</th>
+              <th data-col="contrato">Contrato</th>
+              <th data-col="tipo_loja">Tipo Loja</th>
+              <th data-col="loja">Loja</th>
+              <th data-col="tipo">Tipo</th>
+              <th data-col="nome_da_classe">Classe</th>
+              <th data-col="area">Área</th>
+              <th data-col="valor_lancado">Valor Lançado</th>
+              <th data-col="descontos">Descontos</th>
+              <th data-col="juros">Juros</th>
+              <th data-col="correcoes">Correções</th>
+              <th data-col="multa">Multa</th>
+              <th data-col="valor_faturado_total">Faturado Total</th>
+              <th data-col="valor_liquidado">Valor Liquidado</th>
+              <th data-col="valor_m2">R$/m²</th>
+            </tr>
+          </thead>
+
+          <tbody id="faturamentoTableBody">
+            <tr>
+              <td colspan="16">Carregando Relatório...</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="pagination">
+          <button id="paginaAnteriorButton" type="button">Anterior</button>
+          <span id="paginaInfo">Página 1</span>
+          <button id="proximaPaginaButton" type="button">Próxima</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/menu.js"></script>
+    <script src="/js/main.js"></script>
+    <script src="/js/pages/faturamento-relatorio.js"></script>
+  </body>
+</html>
