@@ -1018,7 +1018,6 @@ async function buscarValoresMensaisAgregados({ shoppingId, competencias }) {
         ON l_filtro.num_locatario::text = c.num_locatario::text
       WHERE c.idfilial::text = $1
         AND c.mes_mapa::text = ANY($2)
-        AND COALESCE(UPPER(TRIM(l_filtro.nome_fantasia)), '') <> 'EDER BARBOSA DOS REIS'
         AND NOT EXISTS (
           SELECT 1
           FROM gshop_contas reemitida
@@ -1377,6 +1376,23 @@ function formulaContabil(cell, formula, size = 15, bold = false) {
   cell.alignment = { horizontal: "right", vertical: "middle" };
 }
 
+function formulaRecebidoAnual(colMesEsq, colMesDir) {
+  return [
+    `IF(${colMesEsq}22>0,${colMesEsq}19,0)`,
+    `IF(${colMesEsq}27>0,${colMesEsq}24,0)`,
+    `IF(${colMesEsq}32>0,${colMesEsq}29,0)`,
+    `IF(${colMesEsq}37>0,${colMesEsq}34,0)`,
+    `IF(${colMesEsq}42>0,${colMesEsq}39,0)`,
+    `IF(${colMesDir}17>0,${colMesEsq}44,0)`,
+    `IF(${colMesDir}22>0,${colMesDir}19,0)`,
+    `IF(${colMesDir}27>0,${colMesDir}24,0)`,
+    `IF(${colMesDir}32>0,${colMesDir}29,0)`,
+    `IF(${colMesDir}37>0,${colMesDir}34,0)`,
+    `IF(${colMesDir}42>0,${colMesDir}39,0)`,
+    `IF(${colMesDir}44>0,${colMesDir}44,0)`,
+  ].join("+");
+}
+
 function montarBlocoMensal(sheet, config) {
   const {
     titulo,
@@ -1554,11 +1570,11 @@ sheet.mergeCells("G11:H11");
   sheet.getCell("M12").value = "TOTAL - GERAL";
 
 formulaContabil(sheet.getCell("N7"), "IF(C22>0,C17,0)+IF(C27>0,C22,0)+IF(C32>0,C27,0)+IF(C37>0,C32,0)+IF(C42>0,C37,0)+IF(E17>0,C42,0)+IF(E22>0,E17,0)+IF(E27>0,E22,0)+IF(E32>0,E27,0)+IF(E37>0,E32,0)+IF(E42>0,E37,0)+IF(E44>0,E42,0)", 15);
-formulaContabil(sheet.getCell("O7"), "C19+C24+C29+C34+C39+C44+E19+E24+E29+E34+E39+E44", 15);
+formulaContabil(sheet.getCell("O7"), formulaRecebidoAnual("C", "E"), 15);
 percentualFormula(sheet.getCell("P7"), "O7/N7", 18);
 
 formulaContabil(sheet.getCell("N8"), "IF(M22>0,M17,0)+IF(M27>0,M22,0)+IF(M32>0,M27,0)+IF(M37>0,M32,0)+IF(M42>0,M37,0)+IF(O17>0,M42,0)+IF(O22>0,O17,0)+IF(O27>0,O22,0)+IF(O32>0,O27,0)+IF(O37>0,O32,0)+IF(O42>0,O37,0)+IF(O44>0,O42,0)", 15);
-formulaContabil(sheet.getCell("O8"), "M19+M24+M29+M34+M39+M44+O19+O24+O29+O34+O39+O44", 15);
+formulaContabil(sheet.getCell("O8"), formulaRecebidoAnual("M", "O"), 15);
 percentualFormula(sheet.getCell("P8"), "O8/N8", 18);
 
 formulaContabil(sheet.getCell("N9"), "SUM(N7:N8)", 15);
@@ -1566,7 +1582,7 @@ formulaContabil(sheet.getCell("O9"), "SUM(O7:O8)", 15);
 percentualFormula(sheet.getCell("P9"), "O9/N9", 18);
 
 formulaContabil(sheet.getCell("N11"), "IF(H22>0,H17,0)+IF(H27>0,H22,0)+IF(H32>0,H27,0)+IF(H37>0,H32,0)+IF(H42>0,H37,0)+IF(J17>0,H42,0)+IF(J22>0,J17,0)+IF(J27>0,J22,0)+IF(J32>0,J27,0)+IF(J37>0,J32,0)+IF(J42>0,J37,0)+IF(J44>0,J42,0)", 15);
-formulaContabil(sheet.getCell("O11"), "H19+H24+H29+H34+H39+H44+J19+J24+J29+J34+J39+J44", 15);
+formulaContabil(sheet.getCell("O11"), formulaRecebidoAnual("H", "J"), 15);
 percentualFormula(sheet.getCell("P11"), "O11/N11", 18);
 
 formulaContabil(sheet.getCell("N12"), "N7+N8+N11", 15);

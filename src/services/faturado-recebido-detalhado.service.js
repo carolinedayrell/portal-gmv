@@ -33,9 +33,9 @@ const SHOPPINGS_DETALHADO = {
 };
 
 const CLASSES_DETALHADO = {
-  taxaAdministracao: ["14"],
+  taxaAdministracao: ["14", "11503"],
   fundoReserva: ["111"],
-  agua: ["143"],
+  agua: ["143","1244","1100","459","411"],
   gas: [
   "11257",
   "1297",
@@ -43,21 +43,26 @@ const CLASSES_DETALHADO = {
   "1097",
   "176",
 ],
-  energia: ["144"],
-  marketing: ["11264"],
-  iptu: ["11233"],
+  energia: ["144","1245","1099","460","412","246"],
+  marketing: ["11264","11527"],
+  iptu: ["11233","1250","482","434"],
   fppAviao: ["11582"],
 
   outrasReceitas: [
     "156",
-    "11236",
+    "11236","11235"
   ],
 
-  fundoPromocao: ["4"],
+  fundoPromocao: ["4",
+    "9",
+    "5"],
 
   condominio: [
     "2",
     "11459",
+    "11415",
+    "18",
+    "3"
   ],
 
   aluguel: [
@@ -387,7 +392,6 @@ async function buscarLancamentosDetalhados(pool, shoppingId, ano) {
           AND c.data_definicao < $4::date
         )
       )
-      AND COALESCE(UPPER(TRIM(l.nome_fantasia)), '') <> 'EDER BARBOSA DOS REIS'
       AND NOT EXISTS (
         SELECT 1
         FROM gshop_contas reemitida
