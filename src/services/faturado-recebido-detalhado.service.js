@@ -350,13 +350,16 @@ function obterContasPrincipais() {
 
 async function buscarLancamentosDetalhados(pool, shoppingId, ano) {
   const inicio = `${ano}-01-01`;
-  const fimCompetencia = `${Number(ano) + 1}-01-01`;
- const fimCaixa = `${Number(ano) + 1}-01-01`;
+  const fimCaixa = `${Number(ano) + 1}-01-01`;
+  const competencias = Array.from(
+    { length: 12 },
+    (_, index) => `${String(index + 1).padStart(2, "0")}/${ano}`
+  );
 
   const result = await pool.query(
     `
     SELECT
-      c.mes_mapa::text AS competencia,
+      c.mes_mapa AS competencia,
       c.num_classe_da_conta::text AS classe_id,
       (
         COALESCE(c.valor_lcto, 0)
@@ -369,26 +372,11 @@ async function buscarLancamentosDetalhados(pool, shoppingId, ano) {
       c.data_pagamento,
       TO_CHAR(c.data_definicao, 'YYYY-MM') AS periodo_caixa
     FROM gshop_contas c
-    LEFT JOIN gshop_locatarios l
-      ON l.num_locatario::text = c.num_locatario::text
-    WHERE c.idfilial::text = $1
+    WHERE c.idfilial = $1::bigint
       AND (
-        (
-          CASE
-            WHEN c.mes_mapa::text ~ '^(0[1-9]|1[0-2])/[0-9]{4}$'
-              THEN TO_DATE(c.mes_mapa::text, 'MM/YYYY')
-            ELSE NULL
-          END
-        ) >= $2::date
-        AND (
-          CASE
-            WHEN c.mes_mapa::text ~ '^(0[1-9]|1[0-2])/[0-9]{4}$'
-              THEN TO_DATE(c.mes_mapa::text, 'MM/YYYY')
-            ELSE NULL
-          END
-        ) < $3::date
+        c.mes_mapa = ANY($2::text[])
         OR (
-          c.data_definicao >= $2::date
+          c.data_definicao >= $3::date
           AND c.data_definicao < $4::date
         )
       )
@@ -396,10 +384,10 @@ async function buscarLancamentosDetalhados(pool, shoppingId, ano) {
         SELECT 1
         FROM gshop_contas reemitida
         WHERE reemitida.idlancamento_origem_acordo IS NOT NULL
-          AND reemitida.idlancamento_origem_acordo::text = c.idlancamento::text
+          AND reemitida.idlancamento_origem_acordo = c.idlancamento
       )
     `,
-    [String(shoppingId), inicio, fimCompetencia, fimCaixa]
+    [String(shoppingId), competencias, inicio, fimCaixa]
   );
 
   return result.rows;
@@ -1659,15 +1647,33 @@ function validarParametros(query, shoppingIdsPermitidos) {
   return { shoppingIds, anos };
 }
 
+function emitirProgresso(onProgress, etapa, detalhes = {}) {
+  if (typeof onProgress !== "function") return;
+
+  try {
+    onProgress(etapa, detalhes);
+  } catch (error) {
+    console.error(
+      "Erro ao registrar progresso do relatório detalhado:",
+      error
+    );
+  }
+}
+
 async function gerarWorkbookDetalhado(
   pool,
   query,
-  shoppingIdsPermitidos = null
+  shoppingIdsPermitidos = null,
+  onProgress = null
 ) {
   const { shoppingIds, anos } = validarParametros(
     query,
     shoppingIdsPermitidos
   );
+  emitirProgresso(onProgress, "PARAMETROS_VALIDADOS", {
+    shoppingIds,
+    anos,
+  });
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Portal GMV";
   workbook.created = new Date();
@@ -1683,18 +1689,42 @@ async function gerarWorkbookDetalhado(
     const config = SHOPPINGS_DETALHADO[shoppingId];
 
     for (const ano of anos) {
+      emitirProgresso(onProgress, "BUSCANDO_LANCAMENTOS", {
+        shoppingId,
+        shopping: config.nomeAba,
+        ano,
+      });
       const lancamentos = await buscarLancamentosDetalhados(
         pool,
         shoppingId,
         ano
       );
+      emitirProgresso(onProgress, "LANCAMENTOS_CARREGADOS", {
+        shoppingId,
+        shopping: config.nomeAba,
+        ano,
+        quantidade: lancamentos.length,
+      });
       const dados = agruparLancamentos(lancamentos, ano);
       fontes.push(montarAbaFonte(workbook, config, ano, dados));
+      emitirProgresso(onProgress, "ABA_MONTADA", {
+        shoppingId,
+        shopping: config.nomeAba,
+        ano,
+        abas: workbook.worksheets.length,
+      });
     }
   }
 
+  emitirProgresso(onProgress, "MONTANDO_RESUMO", {
+    fontes: fontes.length,
+    anos,
+  });
   montarResumo(resumo, fontes, anos);
   workbook.views = [{ activeTab: 0 }];
+  emitirProgresso(onProgress, "WORKBOOK_CONCLUIDO", {
+    abas: workbook.worksheets.length,
+  });
 
   return workbook;
 }

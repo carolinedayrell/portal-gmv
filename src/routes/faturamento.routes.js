@@ -1,4 +1,5 @@
 ﻿const ExcelJS = require("exceljs");
+const crypto = require("crypto");
 const express = require("express");
 const pool = require("../db");
 const {
@@ -19,6 +20,14 @@ router.use(authMiddleware, shoppingScopeMiddleware);
 const DATA_MINIMA_BUSCA = "2024-01-01";
 const FATURAMENTO_CACHE_TTL_MS = Number(
   process.env.FATURAMENTO_CACHE_TTL_MS || 26 * 60 * 60 * 1000
+);
+const DB_READ_RETRY_ATTEMPTS = Math.max(
+  Number(process.env.DB_READ_RETRY_ATTEMPTS || 3),
+  1
+);
+const DB_READ_RETRY_DELAY_MS = Math.max(
+  Number(process.env.DB_READ_RETRY_DELAY_MS || 1500),
+  100
 );
 const FATURAMENTO_EXPORT_COLUMNS = [
   { id: "idlancamento", label: "ID Lançamento" },
@@ -54,8 +63,179 @@ const faturamentoCache = {
   erro: null,
 };
 
+const CODIGOS_TRANSITORIOS_BANCO = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EPIPE",
+  "ENETDOWN",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+  "57P01",
+  "57P02",
+  "57P03",
+  "53300",
+]);
+
+function aguardar(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function erroTransitorioBanco(error) {
+  if (CODIGOS_TRANSITORIOS_BANCO.has(error?.code)) return true;
+
+  const mensagem = String(error?.message || error || "").toLowerCase();
+  return [
+    "connection terminated",
+    "connection timeout",
+    "secure tls connection",
+    "socket disconnected",
+    "read econnreset",
+  ].some((trecho) => mensagem.includes(trecho));
+}
+
+async function consultarBancoComRetentativa(
+  texto,
+  parametros,
+  contexto = "consulta"
+) {
+  let ultimoErro;
+
+  for (let tentativa = 1; tentativa <= DB_READ_RETRY_ATTEMPTS; tentativa += 1) {
+    try {
+      return await pool.query(texto, parametros);
+    } catch (error) {
+      ultimoErro = error;
+      if (!erroTransitorioBanco(error) || tentativa === DB_READ_RETRY_ATTEMPTS) {
+        throw error;
+      }
+
+      const atraso = DB_READ_RETRY_DELAY_MS * tentativa;
+      console.warn(
+        `[POSTGRES] Falha transitoria em ${contexto}; ` +
+          `nova tentativa ${tentativa + 1}/${DB_READ_RETRY_ATTEMPTS} ` +
+          `em ${atraso} ms: ${error.code || error.message}`
+      );
+      await aguardar(atraso);
+    }
+  }
+
+  throw ultimoErro;
+}
+
+const poolLeituraResiliente = {
+  query(texto, parametros) {
+    return consultarBancoComRetentativa(
+      texto,
+      parametros,
+      "relatorio detalhado"
+    );
+  },
+};
+
 function splitParam(value) {
   return value ? String(value).split(",").filter(Boolean) : [];
+}
+
+function valorSeguroLog(value, limite = 500) {
+  if (value === null || value === undefined || value === "") return null;
+  const texto = String(value).replace(/[\r\n\t]+/g, " ").trim();
+  return texto.length > limite ? `${texto.slice(0, limite)}...` : texto;
+}
+
+function filtrosEmissaoLog(query = {}) {
+  const camposPermitidos = [
+    "anos",
+    "competencia",
+    "shopping",
+    "loja",
+    "tipo",
+    "tipoLoja",
+    "idlancamento",
+    "colunas",
+  ];
+
+  return camposPermitidos.reduce((filtros, campo) => {
+    const valor = valorSeguroLog(query[campo]);
+    if (valor !== null) filtros[campo] = valor;
+    return filtros;
+  }, {});
+}
+
+function iniciarLogEmissao(req, tipoRelatorio) {
+  const emissao = {
+    id: crypto.randomUUID(),
+    tipoRelatorio,
+    iniciadoEm: Date.now(),
+    usuarioId: req.user?.id || null,
+    usuarioNome: valorSeguroLog(req.user?.nome, 150),
+    perfil: valorSeguroLog(req.user?.perfil, 50),
+    filtros: filtrosEmissaoLog(req.query),
+  };
+
+  console.log(
+    "[RELATORIO]",
+    JSON.stringify({
+      evento: "INICIO",
+      emissaoId: emissao.id,
+      tipoRelatorio: emissao.tipoRelatorio,
+      usuarioId: emissao.usuarioId,
+      usuarioNome: emissao.usuarioNome,
+      perfil: emissao.perfil,
+      filtros: emissao.filtros,
+      dataHora: new Date().toISOString(),
+    })
+  );
+
+  return emissao;
+}
+
+function registrarProgressoEmissao(emissao, etapa, detalhes = {}) {
+  console.log(
+    "[RELATORIO]",
+    JSON.stringify({
+      evento: "PROGRESSO",
+      emissaoId: emissao.id,
+      tipoRelatorio: emissao.tipoRelatorio,
+      etapa,
+      duracaoMs: Date.now() - emissao.iniciadoEm,
+      detalhes,
+      dataHora: new Date().toISOString(),
+    })
+  );
+}
+
+function concluirLogEmissao(emissao, detalhes = {}) {
+  console.log(
+    "[RELATORIO]",
+    JSON.stringify({
+      evento: "SUCESSO",
+      emissaoId: emissao.id,
+      tipoRelatorio: emissao.tipoRelatorio,
+      usuarioId: emissao.usuarioId,
+      duracaoMs: Date.now() - emissao.iniciadoEm,
+      detalhes,
+      dataHora: new Date().toISOString(),
+    })
+  );
+}
+
+function registrarErroEmissao(emissao, error, detalhes = {}) {
+  console.error(
+    "[RELATORIO]",
+    JSON.stringify({
+      evento: "ERRO",
+      emissaoId: emissao.id,
+      tipoRelatorio: emissao.tipoRelatorio,
+      usuarioId: emissao.usuarioId,
+      duracaoMs: Date.now() - emissao.iniciadoEm,
+      statusCode: error?.statusCode || 500,
+      erro: valorSeguroLog(error?.message || error, 2000),
+      detalhes,
+      dataHora: new Date().toISOString(),
+    })
+  );
+  console.error(error);
 }
 
 function competenciaSql(alias = "c") {
@@ -392,8 +572,8 @@ async function obterBaseFaturamento({ force = false } = {}) {
   }
 
   faturamentoCache.carregando = (async () => {
-    const [dadosResult, estadoResult] = await Promise.all([
-      pool.query(`
+    const dadosResult = await consultarBancoComRetentativa(
+      `
         SELECT
           idlancamento,
           competencia,
@@ -416,8 +596,12 @@ async function obterBaseFaturamento({ force = false } = {}) {
           valor_liquidado,
           data_baixa
         FROM portal_faturamento_cache
-      `),
-      pool.query(`
+      `,
+      undefined,
+      "carregamento do cache de faturamento"
+    );
+    const estadoResult = await consultarBancoComRetentativa(
+      `
         SELECT
           ultima_carga_id,
           ultima_carga_importada_em,
@@ -427,8 +611,10 @@ async function obterBaseFaturamento({ force = false } = {}) {
           erro
         FROM portal_faturamento_cache_estado
         WHERE chave = 'faturamento'
-      `),
-    ]);
+      `,
+      undefined,
+      "estado do cache de faturamento"
+    );
 
     faturamentoCache.dados = dadosResult.rows.map(normalizarLinhaCache);
     aplicarEstadoCache(estadoResult.rows[0]);
@@ -811,8 +997,8 @@ async function processarCargasPendentes() {
   }
 
   faturamentoCache.sincronizando = (async () => {
-    const [result, estadoResult] = await Promise.all([
-      pool.query(`
+    const result = await consultarBancoComRetentativa(
+      `
         SELECT
           c.id,
           c.tipo,
@@ -823,13 +1009,19 @@ async function processarCargasPendentes() {
           AND c.status = 'CONCLUIDA'
           AND c.id > COALESCE(e.ultima_carga_id, 0)
         ORDER BY c.id
-      `),
-      pool.query(`
+      `,
+      undefined,
+      "cargas pendentes do cache"
+    );
+    const estadoResult = await consultarBancoComRetentativa(
+      `
         SELECT ultima_reconstrucao_completa_em
         FROM portal_faturamento_cache_estado
         WHERE chave = 'faturamento'
-      `),
-    ]);
+      `,
+      undefined,
+      "estado da reconstrucao do cache"
+    );
     const resultados = [];
     const cacheNuncaInicializado =
       !estadoResult.rows[0]?.ultima_reconstrucao_completa_em;
@@ -1394,6 +1586,8 @@ function preencherCelulaExcel(cell, value, coluna) {
 }
 
 router.get("/relatorio/exportar", authMiddleware, async (req, res) => {
+  const emissao = iniciarLogEmissao(req, "RELATORIO_FATURAMENTO");
+
   try {
     const queryRelatorio = { ...req.query };
     const shoppingIdsPermitidos = req.shoppingScope.shoppingIds;
@@ -1415,6 +1609,11 @@ router.get("/relatorio/exportar", authMiddleware, async (req, res) => {
     );
     const dados = ordenarRelatorio(agruparRelatorio(baseFiltrada));
     const colunas = colunasExportacao(req.query);
+    registrarProgressoEmissao(emissao, "DADOS_PREPARADOS", {
+      registrosBase: baseFiltrada.length,
+      linhasExcel: dados.length,
+      colunas: colunas.length,
+    });
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Faturamento");
 
@@ -1449,13 +1648,25 @@ router.get("/relatorio/exportar", authMiddleware, async (req, res) => {
       'attachment; filename="relatorio-faturamento.xlsx"'
     );
 
+    registrarProgressoEmissao(emissao, "GRAVANDO_ARQUIVO", {
+      linhasExcel: dados.length,
+    });
     await workbook.xlsx.write(res);
     res.end();
-  } catch (error) {
-    console.error("Erro ao exportar relatório de faturamento:", error);
-    res.status(500).json({
-      message: `Erro ao exportar relatório de faturamento: ${error.message}`,
+    concluirLogEmissao(emissao, {
+      arquivo: "relatorio-faturamento.xlsx",
+      linhasExcel: dados.length,
+      abas: workbook.worksheets.length,
     });
+  } catch (error) {
+    registrarErroEmissao(emissao, error);
+    if (!res.headersSent) {
+      res.status(error.statusCode || 500).json({
+        message: `Erro ao exportar relatório de faturamento: ${error.message}`,
+      });
+    } else if (!res.writableEnded) {
+      res.end();
+    }
   }
 });
 
@@ -1491,7 +1702,7 @@ async function obterShoppingsSelecionadosExcel(
     }
   }
 
-  const result = await pool.query(
+  const result = await consultarBancoComRetentativa(
     `
     SELECT
       num_shopping::text AS id,
@@ -1508,7 +1719,8 @@ async function obterShoppingsSelecionadosExcel(
       num_shopping::text
     )
     `,
-    [shoppingIds]
+    [shoppingIds],
+    "shoppings do relatorio"
   );
 
   return result.rows;
@@ -1541,11 +1753,11 @@ function obterUltimoDiaUtil(dataBase = new Date()) {
 }
 
 async function buscarValoresMensaisAgregados({ shoppingId, competencias }) {
-  const result = await pool.query(
+  const result = await consultarBancoComRetentativa(
     `
     WITH contas_base AS (
       SELECT
-        c.mes_mapa::text AS competencia,
+        c.mes_mapa AS competencia,
         ${tipoSql("c")} AS tipo,
         ${valorFaturadoSql("c")} AS valor_faturado,
         COALESCE(c.valor_liquidado, 0) AS valor_liquidado,
@@ -1554,13 +1766,13 @@ async function buscarValoresMensaisAgregados({ shoppingId, competencias }) {
       FROM gshop_contas c
       LEFT JOIN gshop_locatarios l_filtro
         ON l_filtro.num_locatario::text = c.num_locatario::text
-      WHERE c.idfilial::text = $1
-        AND c.mes_mapa::text = ANY($2)
+      WHERE c.idfilial = $1::bigint
+        AND c.mes_mapa = ANY($2::text[])
         AND NOT EXISTS (
           SELECT 1
           FROM gshop_contas reemitida
           WHERE reemitida.idlancamento_origem_acordo IS NOT NULL
-            AND reemitida.idlancamento_origem_acordo::text = c.idlancamento::text
+            AND reemitida.idlancamento_origem_acordo = c.idlancamento
         )
     ),
     base AS (
@@ -1604,7 +1816,8 @@ async function buscarValoresMensaisAgregados({ shoppingId, competencias }) {
     FROM base
     GROUP BY competencia, tipo_grupo
     `,
-    [String(shoppingId), competencias]
+    [String(shoppingId), competencias],
+    "valores mensais do relatorio"
   );
 
   return new Map(
@@ -2198,6 +2411,8 @@ sheet.getCell("C7").font = { name: "Arial", bold: false, size: 18 };
 }
 
 router.get("/gerar-tabelas/faturado-recebido", authMiddleware, async (req, res) => {
+  const emissao = iniciarLogEmissao(req, "FATURADO_X_RECEBIDO");
+
   try {
     const anos = String(req.query.anos || "")
       .split(",")
@@ -2205,7 +2420,9 @@ router.get("/gerar-tabelas/faturado-recebido", authMiddleware, async (req, res) 
       .filter(Boolean);
 
     if (!anos.length) {
-      return res.status(400).json({ message: "Selecione pelo menos um ano." });
+      const error = new Error("Selecione pelo menos um ano.");
+      error.statusCode = 400;
+      throw error;
     }
 
     const workbook = new ExcelJS.Workbook();
@@ -2216,11 +2433,29 @@ const shoppings = await obterShoppingsSelecionadosExcel(
   req.query,
   req.shoppingScope.shoppingIds
 );
+    registrarProgressoEmissao(emissao, "PARAMETROS_VALIDADOS", {
+      anos,
+      shoppings: shoppings.map((shopping) => ({
+        id: String(shopping.id),
+        nome: shopping.nome,
+      })),
+    });
 
 for (const ano of anos) {
   for (const shopping of shoppings) {
+    registrarProgressoEmissao(emissao, "PROCESSANDO_SHOPPING_ANO", {
+      ano,
+      shoppingId: String(shopping.id),
+      shopping: shopping.nome,
+    });
     const dados = await buscarDadosFaturadoRecebidoExcel(ano, req.query, shopping);
     montarAbaFaturadoRecebido(workbook, dados);
+    registrarProgressoEmissao(emissao, "ABA_MONTADA", {
+      ano,
+      shoppingId: String(shopping.id),
+      shopping: shopping.nome,
+      abas: workbook.worksheets.length,
+    });
   }
 }
 
@@ -2234,24 +2469,44 @@ for (const ano of anos) {
       'attachment; filename="faturado-x-recebido.xlsx"'
     );
 
+    registrarProgressoEmissao(emissao, "GRAVANDO_ARQUIVO", {
+      abas: workbook.worksheets.length,
+    });
     await workbook.xlsx.write(res);
     res.end();
-  } catch (error) {
-    console.error("Erro ao gerar Faturado x Recebido:", error);
-   res.status(error.statusCode || 500).json({
-      message: `Erro ao gerar Faturado x Recebido: ${error.message}`,
+    concluirLogEmissao(emissao, {
+      arquivo: "faturado-x-recebido.xlsx",
+      anos,
+      shoppings: shoppings.length,
+      abas: workbook.worksheets.length,
     });
+  } catch (error) {
+    registrarErroEmissao(emissao, error);
+    if (!res.headersSent) {
+      res.status(error.statusCode || 500).json({
+        message: `Erro ao gerar Faturado x Recebido: ${error.message}`,
+      });
+    } else if (!res.writableEnded) {
+      res.end();
+    }
   }
 });
 
 router.get(
   "/gerar-tabelas/faturado-recebido-detalhado",
   async (req, res) => {
+    const emissao = iniciarLogEmissao(
+      req,
+      "FATURADO_X_RECEBIDO_DETALHADO"
+    );
+
     try {
       const workbook = await gerarWorkbookDetalhado(
-        pool,
+        poolLeituraResiliente,
         req.query,
-        req.shoppingScope.shoppingIds
+        req.shoppingScope.shoppingIds,
+        (etapa, detalhes) =>
+          registrarProgressoEmissao(emissao, etapa, detalhes)
       );
 
       res.setHeader(
@@ -2263,18 +2518,26 @@ router.get(
         'attachment; filename="faturado-x-recebido-detalhado.xlsx"'
       );
 
+      registrarProgressoEmissao(emissao, "GRAVANDO_ARQUIVO", {
+        abas: workbook.worksheets.length,
+      });
       await workbook.xlsx.write(res);
       res.end();
-    } catch (error) {
-      console.error(
-        "Erro ao gerar Faturado x Recebido - Detalhado:",
-        error
-      );
-      res.status(error.statusCode || 500).json({
-        message:
-          error.message ||
-          "Erro ao gerar Faturado x Recebido - Detalhado.",
+      concluirLogEmissao(emissao, {
+        arquivo: "faturado-x-recebido-detalhado.xlsx",
+        abas: workbook.worksheets.length,
       });
+    } catch (error) {
+      registrarErroEmissao(emissao, error);
+      if (!res.headersSent) {
+        res.status(error.statusCode || 500).json({
+          message:
+            error.message ||
+            "Erro ao gerar Faturado x Recebido - Detalhado.",
+        });
+      } else if (!res.writableEnded) {
+        res.end();
+      }
     }
   }
 );

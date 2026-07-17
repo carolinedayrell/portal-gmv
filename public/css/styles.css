@@ -202,6 +202,14 @@ button:hover {
   color: var(--danger);
 }
 
+.message[data-status="loading"] {
+  color: var(--gmv-blue);
+}
+
+.message[data-status="success"] {
+  color: #166534;
+}
+
 .nav-group {
   display: grid;
   gap: 6px;
@@ -486,6 +494,15 @@ th:nth-child(4) {
 .table-actions button {
   width: auto;
   padding: 0 14px;
+}
+
+.table-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.table-actions button:disabled:hover {
+  background: var(--gmv-blue);
 }
 
 #faturamentoTable {

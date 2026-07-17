@@ -7,6 +7,53 @@ const filtros = {
 
 const SHOPPINGS_FATURADO_RECEBIDO_DETALHADO = ["3", "17", "31", "8"];
 
+let geracaoRelatorioEmAndamento = null;
+
+function iniciarGeracaoRelatorio(button, mensagem) {
+  if (geracaoRelatorioEmAndamento) {
+    mensagem.textContent = "Aguarde a geração do arquivo em andamento.";
+    return false;
+  }
+
+  const botoes = [
+    document.getElementById("gerarFaturadoRecebidoButton"),
+    document.getElementById("gerarFaturadoRecebidoDetalhadoButton"),
+  ].filter(Boolean);
+
+  geracaoRelatorioEmAndamento = {
+    button,
+    textoOriginal: button.textContent,
+    estadosBotoes: botoes.map((item) => ({
+      button: item,
+      disabled: item.disabled,
+    })),
+  };
+
+  botoes.forEach((item) => {
+    item.disabled = true;
+  });
+  button.textContent = "Gerando arquivo...";
+  button.setAttribute("aria-busy", "true");
+  mensagem.dataset.status = "loading";
+  mensagem.textContent = "Gerando arquivo...";
+
+  return true;
+}
+
+function finalizarGeracaoRelatorio() {
+  if (!geracaoRelatorioEmAndamento) return;
+
+  const { button, textoOriginal, estadosBotoes } =
+    geracaoRelatorioEmAndamento;
+
+  button.textContent = textoOriginal;
+  button.removeAttribute("aria-busy");
+  estadosBotoes.forEach((estado) => {
+    estado.button.disabled = estado.disabled;
+  });
+  geracaoRelatorioEmAndamento = null;
+}
+
 function debounce(fn, delay = 400) {
   let timer;
 
@@ -588,6 +635,7 @@ function montarWorkbookExcel(abas) {
 
 async function gerarFaturadoRecebido() {
   const mensagem = document.getElementById("geracaoMensagem");
+  const button = document.getElementById("gerarFaturadoRecebidoButton");
   const { params, anos } = montarParams();
 
 const anosSelecionados = anos
@@ -595,6 +643,7 @@ const anosSelecionados = anos
   .filter(Boolean);
 
 mensagem.textContent = "";
+delete mensagem.dataset.status;
 
 const shoppingsSelecionados = getSelectedValues("shoppingFiltro");
 const shoppingsPermitidos = ["1", "13"];
@@ -612,6 +661,8 @@ if (!anosSelecionados.length) {
 }
 
   params.set("anos", anosSelecionados.join(","));
+
+  if (!iniciarGeracaoRelatorio(button, mensagem)) return;
 
   try {
     const token = localStorage.getItem("@portalGMV:token");
@@ -639,8 +690,13 @@ if (!anosSelecionados.length) {
     link.click();
 
     URL.revokeObjectURL(url);
+    mensagem.dataset.status = "success";
+    mensagem.textContent = "Arquivo gerado com sucesso.";
   } catch (error) {
+    mensagem.dataset.status = "error";
     mensagem.textContent = error.message;
+  } finally {
+    finalizarGeracaoRelatorio();
   }
 }
 
@@ -653,6 +709,7 @@ async function gerarFaturadoRecebidoDetalhado() {
   const shoppingsSelecionados = getSelectedValues("shoppingFiltro");
 
   mensagem.textContent = "";
+  delete mensagem.dataset.status;
 
   if (!shoppingsSelecionados.length) {
     mensagem.textContent = "Selecione pelo menos um shopping.";
@@ -684,10 +741,9 @@ async function gerarFaturadoRecebidoDetalhado() {
 
   params.set("anos", anosSelecionados.join(","));
 
-  try {
-    button.disabled = true;
-    mensagem.textContent = "Gerando arquivo detalhado...";
+  if (!iniciarGeracaoRelatorio(button, mensagem)) return;
 
+  try {
     const token = localStorage.getItem("@portalGMV:token");
     const response = await fetch(
       `/api/faturamento/gerar-tabelas/faturado-recebido-detalhado?${params.toString()}`,
@@ -714,11 +770,13 @@ async function gerarFaturadoRecebidoDetalhado() {
     link.click();
 
     URL.revokeObjectURL(url);
+    mensagem.dataset.status = "success";
     mensagem.textContent = "Arquivo detalhado gerado com sucesso.";
   } catch (error) {
+    mensagem.dataset.status = "error";
     mensagem.textContent = error.message;
   } finally {
-    button.disabled = false;
+    finalizarGeracaoRelatorio();
   }
 }
 

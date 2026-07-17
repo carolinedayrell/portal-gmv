@@ -70,6 +70,10 @@ const FATURAMENTO_CACHE_POLL_MS = Math.max(
   Number(process.env.FATURAMENTO_CACHE_POLL_MS || 60000),
   10000
 );
+const FATURAMENTO_CACHE_POLL_MAX_MS = Math.max(
+  Number(process.env.FATURAMENTO_CACHE_POLL_MAX_MS || 15 * 60 * 1000),
+  FATURAMENTO_CACHE_POLL_MS
+);
 
 app.listen(PORT, async () => {
   console.log(`Portal GMV rodando na porta ${PORT}`);
@@ -87,18 +91,34 @@ app.listen(PORT, async () => {
     );
   }
 
-  const timerCacheFaturamento = setInterval(async () => {
+  let falhasConsecutivasCache = 0;
+
+  const agendarVerificacaoCache = (atraso) => {
+    const timer = setTimeout(verificarCacheFaturamento, atraso);
+    if (typeof timer.unref === "function") timer.unref();
+  };
+
+  const verificarCacheFaturamento = async () => {
+    let proximoIntervalo = FATURAMENTO_CACHE_POLL_MS;
+
     try {
       await faturamentoRoutes.processarCargasPendentes();
+      falhasConsecutivasCache = 0;
     } catch (error) {
+      falhasConsecutivasCache += 1;
+      proximoIntervalo = Math.min(
+        FATURAMENTO_CACHE_POLL_MS * 2 ** falhasConsecutivasCache,
+        FATURAMENTO_CACHE_POLL_MAX_MS
+      );
       console.error(
-        "[CACHE FATURAMENTO] Erro ao processar cargas pendentes:",
+        `[CACHE FATURAMENTO] Erro ao processar cargas pendentes; ` +
+          `nova verificacao em ${Math.round(proximoIntervalo / 1000)}s:`,
         error
       );
+    } finally {
+      agendarVerificacaoCache(proximoIntervalo);
     }
-  }, FATURAMENTO_CACHE_POLL_MS);
+  };
 
-  if (typeof timerCacheFaturamento.unref === "function") {
-    timerCacheFaturamento.unref();
-  }
+  agendarVerificacaoCache(FATURAMENTO_CACHE_POLL_MS);
 });
