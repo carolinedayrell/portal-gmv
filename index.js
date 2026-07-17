@@ -66,8 +66,39 @@ app.get("/vendas", (req, res) => {
 });
 
 const PORT = process.env.PORT || 4000;
+const FATURAMENTO_CACHE_POLL_MS = Math.max(
+  Number(process.env.FATURAMENTO_CACHE_POLL_MS || 60000),
+  10000
+);
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Portal GMV rodando na porta ${PORT}`);
   console.log(`Acesse: http://localhost:${PORT}`);
+
+  try {
+    await faturamentoRoutes.inicializarCacheFaturamento();
+    console.log(
+      "[CACHE FATURAMENTO] Cache persistido carregado e cargas pendentes processadas."
+    );
+  } catch (error) {
+    console.error(
+      "[CACHE FATURAMENTO] Erro ao inicializar o cache persistido:",
+      error
+    );
+  }
+
+  const timerCacheFaturamento = setInterval(async () => {
+    try {
+      await faturamentoRoutes.processarCargasPendentes();
+    } catch (error) {
+      console.error(
+        "[CACHE FATURAMENTO] Erro ao processar cargas pendentes:",
+        error
+      );
+    }
+  }, FATURAMENTO_CACHE_POLL_MS);
+
+  if (typeof timerCacheFaturamento.unref === "function") {
+    timerCacheFaturamento.unref();
+  }
 });

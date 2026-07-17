@@ -8,13 +8,18 @@ const {
 const {
   gerarWorkbookDetalhado,
 } = require("../services/faturado-recebido-detalhado.service");
+const {
+  filtrarBasePorEscopo,
+} = require("../services/faturamento-shopping-scope.service");
 
 const router = express.Router();
 
 router.use(authMiddleware, shoppingScopeMiddleware);
 
 const DATA_MINIMA_BUSCA = "2024-01-01";
-const FATURAMENTO_CACHE_TTL_MS = Number(process.env.FATURAMENTO_CACHE_TTL_MS || 4 * 60 * 60 * 1000);
+const FATURAMENTO_CACHE_TTL_MS = Number(
+  process.env.FATURAMENTO_CACHE_TTL_MS || 26 * 60 * 60 * 1000
+);
 const FATURAMENTO_EXPORT_COLUMNS = [
   { id: "idlancamento", label: "ID Lançamento" },
   { id: "data_baixa", label: "Data de baixa", type: "date" },
@@ -41,6 +46,12 @@ const faturamentoCache = {
   carregadoEm: null,
   expiraEm: 0,
   carregando: null,
+  sincronizando: null,
+  ultimaCargaId: null,
+  ultimaCargaImportadaEm: null,
+  ultimaReconstrucaoCompletaEm: null,
+  status: "INICIALIZANDO",
+  erro: null,
 };
 
 function splitParam(value) {
@@ -206,20 +217,6 @@ function baseFromSql() {
   `;
 }
 
-function filtrarBasePorEscopo(base, shoppingIdsPermitidos) {
-  if (!Array.isArray(shoppingIdsPermitidos)) {
-    return base;
-  }
-
-  const permitidos = new Set(
-    shoppingIdsPermitidos.map((id) => String(id))
-  );
-
-  return base.filter((item) =>
-    permitidos.has(String(item.shopping_id))
-  );
-}
-
 async function obterCompetenciasRecentes(
   limite = 3,
   shoppingIdsPermitidos = null
@@ -275,6 +272,15 @@ function cacheMeta() {
     ultimaAtualizacao: faturamentoCache.carregadoEm
       ? faturamentoCache.carregadoEm.toISOString()
       : null,
+    ultimaCargaId: faturamentoCache.ultimaCargaId,
+    ultimaCargaImportadaEm: dataParaJson(
+      faturamentoCache.ultimaCargaImportadaEm
+    ),
+    ultimaReconstrucaoCompletaEm: dataParaJson(
+      faturamentoCache.ultimaReconstrucaoCompletaEm
+    ),
+    status: faturamentoCache.status,
+    erro: faturamentoCache.erro,
     expiraEm: faturamentoCache.expiraEm
       ? new Date(faturamentoCache.expiraEm).toISOString()
       : null,
@@ -283,6 +289,97 @@ function cacheMeta() {
 
 function cacheValido() {
   return Array.isArray(faturamentoCache.dados) && Date.now() < faturamentoCache.expiraEm;
+}
+
+function consultaFonteFaturamento({
+  filtrarIds = false,
+  cargaIdParam = "NULL",
+} = {}) {
+  const filtroIdsSql = filtrarIds
+    ? "AND c.idlancamento::text = ANY($1::text[])"
+    : "";
+
+  return `
+    SELECT DISTINCT ON (c.idlancamento::text)
+      c.idlancamento::text AS idlancamento,
+      ${competenciaSql("c")} AS competencia,
+      (
+        EXTRACT(EPOCH FROM ${dataCompetenciaSql("c")}) * 1000
+      )::bigint AS competencia_ordem,
+      c.idfilial::text AS shopping_id,
+      COALESCE(
+        s.nome_reduzido_coligada,
+        s.nome_shopping,
+        c.idfilial::text
+      ) AS shopping,
+      c.num_locacao::text AS contrato,
+      ${tipoLojaSql("c")} AS tipo_loja,
+      l.num_locatario::text AS loja_id,
+      COALESCE(
+        l.nome_fantasia,
+        l.num_locatario::text
+      ) AS loja,
+      ${tipoSql("c")} AS tipo,
+      nc.nome_da_classe,
+      COALESCE(lc.area_total, 0) AS area,
+      COALESCE(c.valor_lcto, 0) AS valor_lancado,
+      COALESCE(c.descontos, 0) AS descontos,
+      COALESCE(c.juros, 0) AS juros,
+      COALESCE(c.correcoes, 0) AS correcoes,
+      COALESCE(c.multa, 0) AS multa,
+      ${valorFaturadoSql("c")} AS valor_faturado_total,
+      COALESCE(c.valor_liquidado, 0) AS valor_liquidado,
+      c.data_pagamento::date AS data_baixa,
+      ${cargaIdParam}::bigint AS carga_id,
+      NOW() AS atualizado_em
+    ${baseFromSql()}
+    WHERE ${competenciaValidaSql("c")}
+      AND c.idlancamento IS NOT NULL
+      AND ${dataCompetenciaSql("c")}
+          >= '${DATA_MINIMA_BUSCA}'::date
+      AND NOT EXISTS (
+        SELECT 1
+        FROM gshop_contas reemitida
+        WHERE reemitida.idlancamento_origem_acordo IS NOT NULL
+          AND reemitida.idlancamento_origem_acordo::text
+              = c.idlancamento::text
+      )
+      ${filtroIdsSql}
+  `;
+}
+
+function normalizarLinhaCache(row) {
+  return {
+    ...row,
+    competencia_ordem: Number(row.competencia_ordem || 0),
+    area: numeroCache(row.area),
+    valor_lancado: numeroCache(row.valor_lancado),
+    descontos: numeroCache(row.descontos),
+    juros: numeroCache(row.juros),
+    correcoes: numeroCache(row.correcoes),
+    multa: numeroCache(row.multa),
+    valor_faturado_total: numeroCache(row.valor_faturado_total),
+    valor_liquidado: numeroCache(row.valor_liquidado),
+    data_baixa: dataParaJson(row.data_baixa),
+  };
+}
+
+function aplicarEstadoCache(estado = {}) {
+  faturamentoCache.ultimaCargaId =
+    estado.ultima_carga_id === null ||
+    estado.ultima_carga_id === undefined
+      ? null
+      : Number(estado.ultima_carga_id);
+  faturamentoCache.ultimaCargaImportadaEm =
+    estado.ultima_carga_importada_em || null;
+  faturamentoCache.ultimaReconstrucaoCompletaEm =
+    estado.ultima_reconstrucao_completa_em || null;
+  faturamentoCache.carregadoEm = estado.cache_gerado_em
+    ? new Date(estado.cache_gerado_em)
+    : null;
+  faturamentoCache.status = estado.status || "DISPONIVEL";
+  faturamentoCache.erro = estado.erro || null;
+  faturamentoCache.expiraEm = Date.now() + FATURAMENTO_CACHE_TTL_MS;
 }
 
 async function obterBaseFaturamento({ force = false } = {}) {
@@ -295,54 +392,46 @@ async function obterBaseFaturamento({ force = false } = {}) {
   }
 
   faturamentoCache.carregando = (async () => {
-    const result = await pool.query(`
-      SELECT
-        c.idlancamento::text AS idlancamento,
-        ${competenciaSql("c")} AS competencia,
-        EXTRACT(EPOCH FROM ${dataCompetenciaSql("c")}) * 1000 AS competencia_ts,
-        c.idfilial::text AS shopping_id,
-        COALESCE(s.nome_reduzido_coligada, s.nome_shopping, c.idfilial::text) AS shopping,
-        c.num_locacao::text AS contrato,
-        ${tipoLojaSql("c")} AS tipo_loja,
-        l.num_locatario::text AS loja_id,
-        COALESCE(l.nome_fantasia, l.num_locatario::text) AS loja,
-        ${tipoSql("c")} AS tipo,
-        nc.nome_da_classe,
-        COALESCE(lc.area_total, 0) AS area,
-        COALESCE(c.valor_lcto, 0) AS valor_lancado,
-        COALESCE(c.descontos, 0) AS descontos,
-        COALESCE(c.juros, 0) AS juros,
-        COALESCE(c.correcoes, 0) AS correcoes,
-        COALESCE(c.multa, 0) AS multa,
-        ${valorFaturadoSql("c")} AS valor_faturado_total,
-        COALESCE(c.valor_liquidado, 0) AS valor_liquidado,
-        c.data_pagamento AS data_baixa
-      ${baseFromSql()}
-      WHERE ${competenciaValidaSql("c")}
-        AND ${dataCompetenciaSql("c")} >= '${DATA_MINIMA_BUSCA}'::date
-        AND NOT EXISTS (
-          SELECT 1
-          FROM gshop_contas reemitida
-          WHERE reemitida.idlancamento_origem_acordo IS NOT NULL
-            AND reemitida.idlancamento_origem_acordo::text = c.idlancamento::text
-        )
-    `);
+    const [dadosResult, estadoResult] = await Promise.all([
+      pool.query(`
+        SELECT
+          idlancamento,
+          competencia,
+          competencia_ordem,
+          shopping_id,
+          shopping,
+          contrato,
+          tipo_loja,
+          loja_id,
+          loja,
+          tipo,
+          nome_da_classe,
+          area,
+          valor_lancado,
+          descontos,
+          juros,
+          correcoes,
+          multa,
+          valor_faturado_total,
+          valor_liquidado,
+          data_baixa
+        FROM portal_faturamento_cache
+      `),
+      pool.query(`
+        SELECT
+          ultima_carga_id,
+          ultima_carga_importada_em,
+          cache_gerado_em,
+          ultima_reconstrucao_completa_em,
+          status,
+          erro
+        FROM portal_faturamento_cache_estado
+        WHERE chave = 'faturamento'
+      `),
+    ]);
 
-    faturamentoCache.dados = result.rows.map((row) => ({
-      ...row,
-      competencia_ordem: Number(row.competencia_ts || 0),
-      area: numeroCache(row.area),
-      valor_lancado: numeroCache(row.valor_lancado),
-      descontos: numeroCache(row.descontos),
-      juros: numeroCache(row.juros),
-      correcoes: numeroCache(row.correcoes),
-      multa: numeroCache(row.multa),
-      valor_faturado_total: numeroCache(row.valor_faturado_total),
-      valor_liquidado: numeroCache(row.valor_liquidado),
-      data_baixa: dataParaJson(row.data_baixa),
-    }));
-    faturamentoCache.carregadoEm = new Date();
-    faturamentoCache.expiraEm = Date.now() + FATURAMENTO_CACHE_TTL_MS;
+    faturamentoCache.dados = dadosResult.rows.map(normalizarLinhaCache);
+    aplicarEstadoCache(estadoResult.rows[0]);
 
     return faturamentoCache.dados;
   })();
@@ -369,6 +458,439 @@ function obterCompetenciasDaBase(base) {
   });
 
   return Array.from(mapa.values()).sort((a, b) => b.ordem - a.ordem);
+}
+
+async function atualizarCachePelaCarga(cargaId) {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      "SELECT pg_advisory_xact_lock(hashtext('portal_faturamento_cache'))"
+    );
+
+    const cargaResult = await client.query(
+      `
+        SELECT id, concluido_em
+        FROM etl_cargas_contas
+        WHERE id = $1
+          AND status = 'CONCLUIDA'
+      `,
+      [cargaId]
+    );
+
+    if (!cargaResult.rows.length) {
+      throw new Error(
+        `Carga ${cargaId} não encontrada ou ainda não concluída.`
+      );
+    }
+
+    const estadoResult = await client.query(`
+      SELECT total_registros
+      FROM portal_faturamento_cache_estado
+      WHERE chave = 'faturamento'
+      FOR UPDATE
+    `);
+    const totalAnterior = Number(
+      estadoResult.rows[0]?.total_registros || 0
+    );
+
+    const idsResult = await client.query(
+      `
+        SELECT DISTINCT idlancamento
+        FROM etl_carga_contas_itens
+        WHERE carga_id = $1
+      `,
+      [cargaId]
+    );
+    const ids = idsResult.rows.map((row) => String(row.idlancamento));
+    let totalRemovido = 0;
+    let totalInserido = 0;
+
+    if (ids.length) {
+      const deleteResult = await client.query(
+        `
+          DELETE FROM portal_faturamento_cache
+          WHERE idlancamento = ANY($1::text[])
+        `,
+        [ids]
+      );
+      totalRemovido = deleteResult.rowCount || 0;
+
+      const insertResult = await client.query(
+        `
+          INSERT INTO portal_faturamento_cache (
+            idlancamento,
+            competencia,
+            competencia_ordem,
+            shopping_id,
+            shopping,
+            contrato,
+            tipo_loja,
+            loja_id,
+            loja,
+            tipo,
+            nome_da_classe,
+            area,
+            valor_lancado,
+            descontos,
+            juros,
+            correcoes,
+            multa,
+            valor_faturado_total,
+            valor_liquidado,
+            data_baixa,
+            carga_id,
+            atualizado_em
+          )
+          ${consultaFonteFaturamento({
+            filtrarIds: true,
+            cargaIdParam: "$2",
+          })}
+        `,
+        [ids, cargaId]
+      );
+      totalInserido = insertResult.rowCount || 0;
+    }
+
+    const novoTotal = Math.max(
+      totalAnterior - totalRemovido + totalInserido,
+      0
+    );
+    const concluidoEm = cargaResult.rows[0].concluido_em;
+
+    await client.query(
+      `
+        UPDATE portal_faturamento_cache_estado
+        SET
+          ultima_carga_id = $1,
+          ultima_carga_importada_em = $2,
+          cache_gerado_em = NOW(),
+          status = 'DISPONIVEL',
+          total_registros = $3,
+          erro = NULL
+        WHERE chave = 'faturamento'
+      `,
+      [cargaId, concluidoEm, novoTotal]
+    );
+
+    const atualizadosResult = ids.length
+      ? await client.query(
+          `
+            SELECT
+              idlancamento,
+              competencia,
+              competencia_ordem,
+              shopping_id,
+              shopping,
+              contrato,
+              tipo_loja,
+              loja_id,
+              loja,
+              tipo,
+              nome_da_classe,
+              area,
+              valor_lancado,
+              descontos,
+              juros,
+              correcoes,
+              multa,
+              valor_faturado_total,
+              valor_liquidado,
+              data_baixa
+            FROM portal_faturamento_cache
+            WHERE idlancamento = ANY($1::text[])
+          `,
+          [ids]
+        )
+      : { rows: [] };
+
+    await client.query("COMMIT");
+
+    if (Array.isArray(faturamentoCache.dados)) {
+      const idsSet = new Set(ids);
+      faturamentoCache.dados = faturamentoCache.dados
+        .filter((item) => !idsSet.has(String(item.idlancamento)))
+        .concat(atualizadosResult.rows.map(normalizarLinhaCache));
+    }
+    aplicarEstadoCache({
+      ultima_carga_id: cargaId,
+      ultima_carga_importada_em: concluidoEm,
+      cache_gerado_em: new Date(),
+      ultima_reconstrucao_completa_em:
+        faturamentoCache.ultimaReconstrucaoCompletaEm,
+      status: "DISPONIVEL",
+      erro: null,
+    });
+
+    console.log(
+      `[CACHE FATURAMENTO] Carga ${cargaId} aplicada: ` +
+        `${ids.length} IDs, ${totalInserido} registros disponíveis.`
+    );
+
+    return {
+      cargaId,
+      idsProcessados: ids.length,
+      registrosDisponiveis: totalInserido,
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    faturamentoCache.status = "ERRO";
+    faturamentoCache.erro = error.message;
+    try {
+      await pool.query(
+        `
+          UPDATE portal_faturamento_cache_estado
+          SET status = 'ERRO', erro = $1
+          WHERE chave = 'faturamento'
+        `,
+        [String(error.stack || error.message || error).slice(0, 10000)]
+      );
+    } catch (estadoError) {
+      console.error(
+        "Erro ao registrar falha do cache de faturamento:",
+        estadoError
+      );
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function reconstruirCacheCompletoInterno(options = {}) {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
+    await client.query(
+      "SELECT pg_advisory_xact_lock(hashtext('portal_faturamento_cache'))"
+    );
+
+    const corteResult = await client.query(`
+      SELECT
+        id AS ultima_carga_id,
+        concluido_em AS ultima_carga_importada_em
+      FROM etl_cargas_contas
+      WHERE status = 'CONCLUIDA'
+      ORDER BY id DESC
+      LIMIT 1
+    `);
+
+    await client.query(`
+      CREATE TEMP TABLE tmp_portal_faturamento_cache
+      (LIKE portal_faturamento_cache INCLUDING DEFAULTS)
+      ON COMMIT DROP
+    `);
+
+    await client.query(`
+      INSERT INTO tmp_portal_faturamento_cache (
+        idlancamento,
+        competencia,
+        competencia_ordem,
+        shopping_id,
+        shopping,
+        contrato,
+        tipo_loja,
+        loja_id,
+        loja,
+        tipo,
+        nome_da_classe,
+        area,
+        valor_lancado,
+        descontos,
+        juros,
+        correcoes,
+        multa,
+        valor_faturado_total,
+        valor_liquidado,
+        data_baixa,
+        carga_id,
+        atualizado_em
+      )
+      ${consultaFonteFaturamento()}
+    `);
+
+    const totalResult = await client.query(`
+      SELECT COUNT(*)::bigint AS total
+      FROM tmp_portal_faturamento_cache
+    `);
+
+    await client.query("TRUNCATE TABLE portal_faturamento_cache");
+    await client.query(`
+      INSERT INTO portal_faturamento_cache
+      SELECT *
+      FROM tmp_portal_faturamento_cache
+    `);
+
+    const corte = corteResult.rows[0] || {};
+    const agora = new Date();
+    await client.query(
+      `
+        UPDATE portal_faturamento_cache_estado
+        SET
+          ultima_carga_id = $1,
+          ultima_carga_importada_em = $2,
+          cache_gerado_em = $3,
+          ultima_reconstrucao_completa_em = $3,
+          status = 'DISPONIVEL',
+          total_registros = $4,
+          erro = NULL
+        WHERE chave = 'faturamento'
+      `,
+      [
+        corte.ultima_carga_id,
+        corte.ultima_carga_importada_em,
+        agora,
+        totalResult.rows[0].total,
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    faturamentoCache.dados = null;
+    faturamentoCache.expiraEm = 0;
+    await obterBaseFaturamento({ force: true });
+
+    const resultado = {
+      origem: options.origem || "manual",
+      total: Number(totalResult.rows[0].total || 0),
+      ultimaCargaId:
+        corte.ultima_carga_id === null
+          ? null
+          : Number(corte.ultima_carga_id),
+    };
+    console.log(
+      `[CACHE FATURAMENTO] Reconstrução completa concluída: ` +
+        `${resultado.total} registros.`
+    );
+    return resultado;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    faturamentoCache.status = "ERRO";
+    faturamentoCache.erro = error.message;
+    try {
+      await pool.query(
+        `
+          UPDATE portal_faturamento_cache_estado
+          SET status = 'ERRO', erro = $1
+          WHERE chave = 'faturamento'
+        `,
+        [String(error.stack || error.message || error).slice(0, 10000)]
+      );
+    } catch (estadoError) {
+      console.error(
+        "Erro ao registrar falha da reconstrução do cache:",
+        estadoError
+      );
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function reconstruirCacheCompleto(options = {}) {
+  if (faturamentoCache.sincronizando) {
+    return faturamentoCache.sincronizando;
+  }
+
+  faturamentoCache.sincronizando =
+    reconstruirCacheCompletoInterno(options);
+
+  try {
+    return await faturamentoCache.sincronizando;
+  } finally {
+    faturamentoCache.sincronizando = null;
+  }
+}
+
+async function processarCargasPendentes() {
+  if (faturamentoCache.sincronizando) {
+    return faturamentoCache.sincronizando;
+  }
+
+  faturamentoCache.sincronizando = (async () => {
+    const [result, estadoResult] = await Promise.all([
+      pool.query(`
+        SELECT
+          c.id,
+          c.tipo,
+          c.requer_reconstrucao_completa
+        FROM etl_cargas_contas c
+        CROSS JOIN portal_faturamento_cache_estado e
+        WHERE e.chave = 'faturamento'
+          AND c.status = 'CONCLUIDA'
+          AND c.id > COALESCE(e.ultima_carga_id, 0)
+        ORDER BY c.id
+      `),
+      pool.query(`
+        SELECT ultima_reconstrucao_completa_em
+        FROM portal_faturamento_cache_estado
+        WHERE chave = 'faturamento'
+      `),
+    ]);
+    const resultados = [];
+    const cacheNuncaInicializado =
+      !estadoResult.rows[0]?.ultima_reconstrucao_completa_em;
+
+    if (cacheNuncaInicializado) {
+      const cargaCompleta = result.rows.find(
+        (row) => row.requer_reconstrucao_completa === true
+      );
+
+      if (!cargaCompleta) {
+        console.log(
+          "[CACHE FATURAMENTO] Cache persistente ainda não possui " +
+            "uma reconstrução completa. Execute a atualização manual " +
+            "como MESTRE antes de aplicar cargas incrementais."
+        );
+        return resultados;
+      }
+
+      resultados.push(
+        await reconstruirCacheCompletoInterno({
+          cargaId: Number(cargaCompleta.id),
+          origem: cargaCompleta.tipo,
+        })
+      );
+      return resultados;
+    }
+
+    for (const row of result.rows) {
+      const cargaId = Number(row.id);
+      if (
+        faturamentoCache.ultimaCargaId !== null &&
+        cargaId <= faturamentoCache.ultimaCargaId
+      ) {
+        continue;
+      }
+
+      if (row.requer_reconstrucao_completa === true) {
+        resultados.push(
+          await reconstruirCacheCompletoInterno({
+            cargaId,
+            origem: row.tipo,
+          })
+        );
+      } else {
+        resultados.push(await atualizarCachePelaCarga(cargaId));
+      }
+    }
+
+    return resultados;
+  })();
+
+  try {
+    return await faturamentoCache.sincronizando;
+  } finally {
+    faturamentoCache.sincronizando = null;
+  }
+}
+
+async function inicializarCacheFaturamento() {
+  await obterBaseFaturamento({ force: true });
+  return processarCargasPendentes();
 }
 
 async function aplicarFiltros(query, options = {}) {
@@ -774,16 +1296,23 @@ router.get("/relatorio", authMiddleware, async (req, res) => {
     const offset = (page - 1) * limit;
 
     const queryRelatorio = { ...req.query };
+    const shoppingIdsPermitidos = req.shoppingScope.shoppingIds;
 
     if (!splitParam(queryRelatorio.competencia).length) {
-      const competenciaInicial = await obterCompetenciaInicial();
+      const competenciaInicial = await obterCompetenciaInicial(
+        shoppingIdsPermitidos
+      );
 
       if (competenciaInicial) {
         queryRelatorio.competencia = competenciaInicial;
       }
     }
 
-    const baseFiltrada = filtrarBase(await obterBaseFaturamento(), queryRelatorio);
+    const baseFiltrada = filtrarBase(
+      await obterBaseFaturamento(),
+      queryRelatorio,
+      { shoppingIdsPermitidos }
+    );
     const dadosAgrupados = ordenarRelatorio(agruparRelatorio(baseFiltrada));
     const dadosPagina = dadosAgrupados.slice(offset, offset + limit);
 
@@ -823,8 +1352,10 @@ router.post("/relatorio/cache/refresh", authMiddleware, async (req, res) => {
   }
 
   try {
-    await obterBaseFaturamento({ force: true });
-    res.json({ cache: cacheMeta() });
+    const resultado = await reconstruirCacheCompleto({
+      origem: "atualização manual",
+    });
+    res.json({ resultado, cache: cacheMeta() });
   } catch (error) {
     console.error("Erro ao atualizar cache de faturamento:", error);
     res.status(500).json({
@@ -865,16 +1396,23 @@ function preencherCelulaExcel(cell, value, coluna) {
 router.get("/relatorio/exportar", authMiddleware, async (req, res) => {
   try {
     const queryRelatorio = { ...req.query };
+    const shoppingIdsPermitidos = req.shoppingScope.shoppingIds;
 
     if (!splitParam(queryRelatorio.competencia).length) {
-      const competenciaInicial = await obterCompetenciaInicial();
+      const competenciaInicial = await obterCompetenciaInicial(
+        shoppingIdsPermitidos
+      );
 
       if (competenciaInicial) {
         queryRelatorio.competencia = competenciaInicial;
       }
     }
 
-    const baseFiltrada = filtrarBase(await obterBaseFaturamento(), queryRelatorio);
+    const baseFiltrada = filtrarBase(
+      await obterBaseFaturamento(),
+      queryRelatorio,
+      { shoppingIdsPermitidos }
+    );
     const dados = ordenarRelatorio(agruparRelatorio(baseFiltrada));
     const colunas = colunasExportacao(req.query);
     const workbook = new ExcelJS.Workbook();
@@ -1740,5 +2278,9 @@ router.get(
     }
   }
 );
+
+router.inicializarCacheFaturamento = inicializarCacheFaturamento;
+router.processarCargasPendentes = processarCargasPendentes;
+router.reconstruirCacheCompleto = reconstruirCacheCompleto;
 
 module.exports = router;
