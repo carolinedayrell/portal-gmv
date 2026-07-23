@@ -2,6 +2,9 @@ let paginaAtual = 1;
 let usuariosCache = [];
 
 const limitePorPagina = 25;
+const usuarioLogado = JSON.parse(
+  localStorage.getItem("@portalGMV:usuario") || "null"
+);
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -12,178 +15,295 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-function obterTotalShoppingsDisponiveis() {
-  return document.getElementById("shoppingsInput").options.length;
+function formatarData(value) {
+  if (!value) return "-";
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
 
-function formatarShoppingsUsuario(usuario) {
-  const shoppingIds = usuario.shopping_ids || [];
-  const totalDisponivel = obterTotalShoppingsDisponiveis();
+function formatarStatus(status) {
+  const nomes = {
+    AGUARDANDO_APROVACAO: "Aguardando aprovação",
+    APROVADO: "Aprovado",
+    REJEITADO: "Rejeitado",
+    BLOQUEADO: "Bloqueado",
+  };
 
-  if (shoppingIds.length && shoppingIds.length === totalDisponivel) {
-    return "Todos";
+  return nomes[status] || status || "-";
+}
+
+function formatarShopping(usuario) {
+  if (usuario.status_cadastro === "AGUARDANDO_APROVACAO") {
+    return usuario.shopping_solicitado_nome || "-";
   }
 
-  if (!usuario.shoppings) {
-    return "Sem restrição cadastrada";
+  if (
+    usuario.perfil === "MESTRE" ||
+    usuario.perfil === "GERENTE_CSC"
+  ) {
+    return "Todos os shoppings";
   }
 
-  const shoppings = String(usuario.shoppings)
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
+  return usuario.shoppings || "Sem vínculo";
+}
 
-  if (shoppings.length <= 1) {
-    return shoppings[0] || "Sem restrição cadastrada";
+function usuarioPodeSerEditado(usuario) {
+  return !(
+    usuarioLogado?.perfil === "GERENTE_CSC" &&
+    usuario.perfil === "MESTRE"
+  );
+}
+
+function renderizarAcoes(usuario) {
+  const id = Number(usuario.id);
+
+  if (usuario.status_cadastro === "AGUARDANDO_APROVACAO") {
+    return `
+      <div class="inline-actions">
+        <button
+          type="button"
+          class="table-action"
+          onclick="abrirAprovacao(${id})"
+        >
+          Aprovar
+        </button>
+        <button
+          type="button"
+          class="table-action danger-action"
+          onclick="abrirRejeicao(${id})"
+        >
+          Rejeitar
+        </button>
+      </div>
+    `;
   }
 
-  return `${shoppings[0]}...`;
+  if (usuario.status_cadastro !== "APROVADO") {
+    return usuario.motivo_rejeicao
+      ? `<span title="${escapeHtml(usuario.motivo_rejeicao)}">Ver motivo</span>`
+      : "-";
+  }
+
+  if (!usuarioPodeSerEditado(usuario)) {
+    return "Somente Mestre";
+  }
+
+  const reenviar =
+    usuario.primeiro_acesso
+      ? `
+        <button
+          type="button"
+          class="table-action secondary-action"
+          onclick="reenviarConvite(${id})"
+        >
+          Reenviar convite
+        </button>
+      `
+      : "";
+
+  return `
+    <div class="inline-actions">
+      <button
+        type="button"
+        class="table-action"
+        onclick="editarUsuario(${id})"
+      >
+        Editar
+      </button>
+      ${reenviar}
+    </div>
+  `;
+}
+
+function preencherSelect(select, itens) {
+  for (const item of itens) {
+    const option = document.createElement("option");
+    option.value = item.id ?? item;
+    option.textContent = item.nome ?? item;
+    select.appendChild(option);
+  }
 }
 
 async function carregarOpcoes() {
   const { perfis, shoppings } = await apiRequest("/usuarios/opcoes");
 
-  const perfilFiltro = document.getElementById("perfilFiltro");
-  const perfilInput = document.getElementById("perfilInput");
-  const shoppingsInput = document.getElementById("shoppingsInput");
-
-  perfis.forEach((perfil) => {
-    const option = `<option value="${escapeHtml(perfil)}">${escapeHtml(perfil)}</option>`;
-
-    perfilFiltro.insertAdjacentHTML("beforeend", option);
-    perfilInput.insertAdjacentHTML("beforeend", option);
-  });
-
-  shoppings.forEach((shopping) => {
-    shoppingsInput.insertAdjacentHTML(
-      "beforeend",
-      `<option value="${shopping.id}">${escapeHtml(shopping.nome)}</option>`
-    );
-  });
+  preencherSelect(
+    document.getElementById("perfilFiltro"),
+    perfis
+  );
+  preencherSelect(
+    document.getElementById("perfilInput"),
+    perfis
+  );
+  preencherSelect(
+    document.getElementById("aprovacaoPerfilInput"),
+    perfis
+  );
+  preencherSelect(
+    document.getElementById("shoppingsInput"),
+    shoppings
+  );
+  preencherSelect(
+    document.getElementById("aprovacaoShoppingsInput"),
+    shoppings
+  );
 }
 
 async function carregarUsuarios() {
   const tbody = document.getElementById("usuariosTableBody");
-  const paginaInfo = document.getElementById("paginaInfo");
-  const anteriorButton = document.getElementById("paginaAnteriorButton");
-  const proximaButton = document.getElementById("proximaPaginaButton");
-
-  const busca = document.getElementById("buscaInput").value;
-  const perfil = document.getElementById("perfilFiltro").value;
-  const ativo = document.getElementById("ativoFiltro").value;
-
+  const mensagem = document.getElementById("paginaMensagem");
   const params = new URLSearchParams({
     page: paginaAtual,
     limit: limitePorPagina,
   });
 
-  if (busca) params.set("busca", busca);
-  if (perfil) params.set("perfil", perfil);
-  if (ativo) params.set("ativo", ativo);
+  const filtros = {
+    busca: document.getElementById("buscaInput").value.trim(),
+    perfil: document.getElementById("perfilFiltro").value,
+    status: document.getElementById("statusFiltro").value,
+    ativo: document.getElementById("ativoFiltro").value,
+  };
+
+  for (const [chave, valor] of Object.entries(filtros)) {
+    if (valor) params.set(chave, valor);
+  }
+
+  mensagem.textContent = "";
 
   try {
-    const response = await apiRequest(`/usuarios?${params.toString()}`);
-    const usuarios = response.data;
-    const pagination = response.pagination;
+    const response = await apiRequest(
+      `/usuarios?${params.toString()}`
+    );
 
-    usuariosCache = usuarios;
+    usuariosCache = response.data;
 
-    if (!usuarios.length) {
+    if (!usuariosCache.length) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="6">Nenhum usuário encontrado.</td>
+          <td colspan="7">Nenhum usuário encontrado.</td>
         </tr>
       `;
     } else {
-      tbody.innerHTML = usuarios
+      tbody.innerHTML = usuariosCache
         .map(
           (usuario) => `
             <tr>
               <td>${escapeHtml(usuario.nome)}</td>
               <td>${escapeHtml(usuario.email)}</td>
-              <td>${escapeHtml(usuario.perfil)}</td>
-              <td title="${escapeHtml(usuario.shoppings || "")}">
-  ${escapeHtml(formatarShoppingsUsuario(usuario))}
-</td>
-              <td>${usuario.ativo ? "Ativo" : "Inativo"}</td>
-              <td>
-                <button
-                  type="button"
-                  class="table-action"
-                  onclick="editarUsuario(${usuario.id})"
-                >
-                  Editar
-                </button>
+              <td>${escapeHtml(usuario.perfil || "-")}</td>
+              <td title="${escapeHtml(formatarShopping(usuario))}">
+                ${escapeHtml(formatarShopping(usuario))}
               </td>
+              <td title="Solicitado em ${escapeHtml(formatarData(usuario.solicitado_em))}">
+                ${escapeHtml(formatarStatus(usuario.status_cadastro))}
+              </td>
+              <td>${
+                usuario.ativo
+                  ? usuario.primeiro_acesso
+                    ? "Ativo — aguardando senha"
+                    : "Ativo"
+                  : "Inativo"
+              }</td>
+              <td>${renderizarAcoes(usuario)}</td>
             </tr>
           `
         )
         .join("");
     }
 
-    paginaInfo.textContent = `Página ${pagination.page} de ${pagination.totalPages || 1}`;
-    anteriorButton.disabled = pagination.page <= 1;
-    proximaButton.disabled = pagination.page >= pagination.totalPages;
+    const pagination = response.pagination;
+    document.getElementById("paginaInfo").textContent =
+      `Página ${pagination.page} de ${pagination.totalPages || 1}`;
+    document.getElementById("paginaAnteriorButton").disabled =
+      pagination.page <= 1;
+    document.getElementById("proximaPaginaButton").disabled =
+      pagination.page >= pagination.totalPages;
   } catch (error) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="6">${escapeHtml(error.message)}</td>
+        <td colspan="7">${escapeHtml(error.message)}</td>
       </tr>
     `;
   }
 }
 
-function abrirModal() {
-  document.getElementById("usuarioModal").hidden = false;
+function selecionarShoppings(selectId, shoppingIds) {
+  const ids = (shoppingIds || []).map(String);
+
+  for (const option of document.getElementById(selectId).options) {
+    const idsDaOpcao = String(option.value).split(",");
+    option.selected = idsDaOpcao.some((id) => ids.includes(id));
+  }
 }
 
-function fecharModal() {
-  document.getElementById("usuarioModal").hidden = true;
-  document.getElementById("usuarioForm").reset();
-  document.getElementById("usuarioMensagem").textContent = "";
-  document.getElementById("usuarioIdInput").value = "";
-  document.getElementById("senhaInput").required = true;
+function obterShoppingsSelecionados(selectId) {
+  return Array.from(
+    document.getElementById(selectId).selectedOptions
+  ).map((option) => option.value);
 }
 
-function abrirModalNovoUsuario() {
-  document.getElementById("usuarioModalTitulo").textContent = "Novo Usuário";
-  document.getElementById("salvarUsuarioButton").textContent = "Salvar Usuário";
-  document.getElementById("usuarioIdInput").value = "";
-  document.getElementById("senhaInput").required = true;
-  document.getElementById("ativoInput").value = "true";
+function atualizarVisibilidadeShoppings(perfilId, grupoId) {
+  const perfil = document.getElementById(perfilId).value;
+  document.getElementById(grupoId).hidden =
+    perfil !== "GERENTE_SHOPPING";
+}
 
-  Array.from(document.getElementById("shoppingsInput").options).forEach((option) => {
-    option.selected = false;
-  });
-
-  abrirModal();
+function fecharModal(modalId, formId, mensagemId) {
+  document.getElementById(modalId).hidden = true;
+  document.getElementById(formId).reset();
+  document.getElementById(mensagemId).textContent = "";
 }
 
 function editarUsuario(usuarioId) {
-  const usuario = usuariosCache.find((item) => Number(item.id) === Number(usuarioId));
+  const usuario = usuariosCache.find(
+    (item) => Number(item.id) === Number(usuarioId)
+  );
 
-  if (!usuario) {
-    return;
-  }
-
-  document.getElementById("usuarioModalTitulo").textContent = "Editar Usuário";
-  document.getElementById("salvarUsuarioButton").textContent = "Atualizar Usuário";
+  if (!usuario || !usuarioPodeSerEditado(usuario)) return;
 
   document.getElementById("usuarioIdInput").value = usuario.id;
   document.getElementById("nomeInput").value = usuario.nome;
   document.getElementById("emailInput").value = usuario.email;
-  document.getElementById("senhaInput").value = "";
-  document.getElementById("senhaInput").required = false;
   document.getElementById("perfilInput").value = usuario.perfil;
   document.getElementById("ativoInput").value = String(usuario.ativo);
+  selecionarShoppings("shoppingsInput", usuario.shopping_ids);
+  atualizarVisibilidadeShoppings(
+    "perfilInput",
+    "edicaoShoppingsGroup"
+  );
+  document.getElementById("usuarioModal").hidden = false;
+}
 
-  const shoppingIds = usuario.shopping_ids || [];
+function abrirAprovacao(usuarioId) {
+  const usuario = usuariosCache.find(
+    (item) => Number(item.id) === Number(usuarioId)
+  );
 
-  Array.from(document.getElementById("shoppingsInput").options).forEach((option) => {
-option.selected = shoppingIds.map(String).includes(String(option.value));
-  });
+  if (!usuario) return;
 
-  abrirModal();
+  document.getElementById("aprovacaoUsuarioId").value = usuario.id;
+  document.getElementById("aprovacaoUsuarioResumo").textContent =
+    `${usuario.nome} — ${usuario.email} — ` +
+    `${usuario.shopping_solicitado_nome || "sem shopping"}`;
+  document.getElementById("aprovacaoPerfilInput").value = "";
+  selecionarShoppings(
+    "aprovacaoShoppingsInput",
+    [usuario.shopping_solicitado]
+  );
+  atualizarVisibilidadeShoppings(
+    "aprovacaoPerfilInput",
+    "aprovacaoShoppingsGroup"
+  );
+  document.getElementById("aprovacaoModal").hidden = false;
+}
+
+function abrirRejeicao(usuarioId) {
+  document.getElementById("rejeicaoUsuarioId").value = usuarioId;
+  document.getElementById("rejeicaoModal").hidden = false;
+  document.getElementById("motivoRejeicaoInput").focus();
 }
 
 async function salvarUsuario(event) {
@@ -191,36 +311,109 @@ async function salvarUsuario(event) {
 
   const mensagem = document.getElementById("usuarioMensagem");
   const usuarioId = document.getElementById("usuarioIdInput").value;
-  const shoppingsSelecionados = Array.from(
-    document.getElementById("shoppingsInput").selectedOptions
-  ).map((option) => option.value);
-
   const payload = {
     nome: document.getElementById("nomeInput").value,
     email: document.getElementById("emailInput").value,
-    senha: document.getElementById("senhaInput").value,
     perfil: document.getElementById("perfilInput").value,
     ativo: document.getElementById("ativoInput").value === "true",
-    shoppingIds: shoppingsSelecionados,
+    shoppingIds: obterShoppingsSelecionados("shoppingsInput"),
   };
-
-  if (!payload.senha) {
-    delete payload.senha;
-  }
 
   mensagem.textContent = "";
 
   try {
-    await apiRequest(usuarioId ? `/usuarios/${usuarioId}` : "/usuarios", {
-      method: usuarioId ? "PUT" : "POST",
+    await apiRequest(`/usuarios/${usuarioId}`, {
+      method: "PUT",
       body: JSON.stringify(payload),
     });
 
-    fecharModal();
-    paginaAtual = 1;
+    fecharModal("usuarioModal", "usuarioForm", "usuarioMensagem");
     await carregarUsuarios();
   } catch (error) {
-    mensagem.textContent = `Não foi possível salvar o usuário. Detalhe: ${error.message}`;
+    mensagem.textContent = error.message;
+  }
+}
+
+async function aprovarUsuario(event) {
+  event.preventDefault();
+
+  const mensagem = document.getElementById("aprovacaoMensagem");
+  const usuarioId =
+    document.getElementById("aprovacaoUsuarioId").value;
+  const payload = {
+    perfil: document.getElementById("aprovacaoPerfilInput").value,
+    shoppingIds: obterShoppingsSelecionados(
+      "aprovacaoShoppingsInput"
+    ),
+  };
+
+  mensagem.textContent = "";
+
+  try {
+    await apiRequest(`/usuarios/${usuarioId}/aprovar`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    fecharModal(
+      "aprovacaoModal",
+      "aprovacaoForm",
+      "aprovacaoMensagem"
+    );
+    await carregarUsuarios();
+  } catch (error) {
+    mensagem.textContent = error.message;
+  }
+}
+
+async function rejeitarUsuario(event) {
+  event.preventDefault();
+
+  const mensagem = document.getElementById("rejeicaoMensagem");
+  const usuarioId =
+    document.getElementById("rejeicaoUsuarioId").value;
+  const motivo =
+    document.getElementById("motivoRejeicaoInput").value;
+
+  mensagem.textContent = "";
+
+  try {
+    await apiRequest(`/usuarios/${usuarioId}/rejeitar`, {
+      method: "POST",
+      body: JSON.stringify({ motivo }),
+    });
+
+    fecharModal(
+      "rejeicaoModal",
+      "rejeicaoForm",
+      "rejeicaoMensagem"
+    );
+    await carregarUsuarios();
+  } catch (error) {
+    mensagem.textContent = error.message;
+  }
+}
+
+async function reenviarConvite(usuarioId) {
+  if (!window.confirm("Deseja reenviar o convite para este usuário?")) {
+    return;
+  }
+
+  const mensagem = document.getElementById("paginaMensagem");
+  mensagem.textContent = "";
+
+  try {
+    const response = await apiRequest(
+      `/usuarios/${usuarioId}/reenviar-convite`,
+      { method: "POST" }
+    );
+
+    await carregarUsuarios();
+    mensagem.dataset.status = "success";
+    mensagem.textContent = response.message;
+  } catch (error) {
+    delete mensagem.dataset.status;
+    mensagem.textContent = error.message;
   }
 }
 
@@ -248,8 +441,48 @@ document.getElementById("proximaPaginaButton").addEventListener("click", () => {
   carregarUsuarios();
 });
 
-document.getElementById("novoUsuarioButton").addEventListener("click", abrirModalNovoUsuario);
-document.getElementById("fecharModalButton").addEventListener("click", fecharModal);
-document.getElementById("usuarioForm").addEventListener("submit", salvarUsuario);
+document.getElementById("perfilInput").addEventListener("change", () => {
+  atualizarVisibilidadeShoppings(
+    "perfilInput",
+    "edicaoShoppingsGroup"
+  );
+});
 
-carregarOpcoes().then(carregarUsuarios);
+document
+  .getElementById("aprovacaoPerfilInput")
+  .addEventListener("change", () => {
+    atualizarVisibilidadeShoppings(
+      "aprovacaoPerfilInput",
+      "aprovacaoShoppingsGroup"
+    );
+  });
+
+document.getElementById("fecharModalButton").addEventListener("click", () => {
+  fecharModal("usuarioModal", "usuarioForm", "usuarioMensagem");
+});
+
+document.getElementById("fecharAprovacaoButton").addEventListener("click", () => {
+  fecharModal(
+    "aprovacaoModal",
+    "aprovacaoForm",
+    "aprovacaoMensagem"
+  );
+});
+
+document.getElementById("fecharRejeicaoButton").addEventListener("click", () => {
+  fecharModal(
+    "rejeicaoModal",
+    "rejeicaoForm",
+    "rejeicaoMensagem"
+  );
+});
+
+document.getElementById("usuarioForm").addEventListener("submit", salvarUsuario);
+document.getElementById("aprovacaoForm").addEventListener("submit", aprovarUsuario);
+document.getElementById("rejeicaoForm").addEventListener("submit", rejeitarUsuario);
+
+carregarOpcoes()
+  .then(carregarUsuarios)
+  .catch((error) => {
+    document.getElementById("paginaMensagem").textContent = error.message;
+  });

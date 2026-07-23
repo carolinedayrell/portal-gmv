@@ -13,23 +13,31 @@
       <header class="page-header">
         <div>
           <h2>Cadastro de Usuários</h2>
-          <p>Gerencie usuários, perfis e shoppings permitidos.</p>
+          <p>Aprove solicitações e gerencie perfis e vínculos.</p>
         </div>
-
-        <button id="novoUsuarioButton" class="primary-action" type="button">
-          Novo Usuário
-        </button>
       </header>
 
-      <section class="panel filters-panel">
-        <input id="buscaInput" type="text" placeholder="Buscar por nome ou e-mail" />
+      <section class="panel filters-panel usuarios-filters">
+        <input
+          id="buscaInput"
+          type="text"
+          placeholder="Buscar por nome ou e-mail"
+        />
 
         <select id="perfilFiltro">
           <option value="">Todos os perfis</option>
         </select>
 
+        <select id="statusFiltro">
+          <option value="">Todos os cadastros</option>
+          <option value="AGUARDANDO_APROVACAO">Aguardando aprovação</option>
+          <option value="APROVADO">Aprovado</option>
+          <option value="REJEITADO">Rejeitado</option>
+          <option value="BLOQUEADO">Bloqueado</option>
+        </select>
+
         <select id="ativoFiltro">
-          <option value="">Todos os status</option>
+          <option value="">Ativos e inativos</option>
           <option value="true">Ativo</option>
           <option value="false">Inativo</option>
         </select>
@@ -37,21 +45,24 @@
         <button id="filtrarButton" type="button">Filtrar</button>
       </section>
 
-      <section class="panel">
+      <p id="paginaMensagem" class="message" aria-live="polite"></p>
+
+      <section class="panel usuarios-table-panel">
         <table>
           <thead>
             <tr>
               <th>Nome</th>
               <th>E-mail</th>
               <th>Perfil</th>
-              <th>Shoppings</th>
-              <th>Status</th>
+              <th>Shopping</th>
+              <th>Cadastro</th>
+              <th>Acesso</th>
               <th>Ações</th>
             </tr>
           </thead>
           <tbody id="usuariosTableBody">
             <tr>
-              <td colspan="6">Carregando...</td>
+              <td colspan="7">Carregando...</td>
             </tr>
           </tbody>
         </table>
@@ -67,7 +78,7 @@
     <div id="usuarioModal" class="modal" hidden>
       <div class="modal-content">
         <header class="modal-header">
-          <h3 id="usuarioModalTitulo">Novo Usuário</h3>
+          <h3>Editar usuário</h3>
           <button id="fecharModalButton" type="button">Fechar</button>
         </header>
 
@@ -80,25 +91,81 @@
           <label for="emailInput">E-mail</label>
           <input id="emailInput" type="email" required />
 
-          <label for="senhaInput">Senha</label>
-          <input id="senhaInput" type="password" required />
-
           <label for="perfilInput">Perfil</label>
           <select id="perfilInput" required>
             <option value="">Selecione</option>
           </select>
 
-          <label for="ativoInput">Status</label>
+          <label for="ativoInput">Acesso</label>
           <select id="ativoInput">
             <option value="true">Ativo</option>
             <option value="false">Inativo</option>
           </select>
 
-          <label for="shoppingsInput">Shoppings atribuídos e permitidos</label>
-          <select id="shoppingsInput" multiple size="6"></select>
+          <div id="edicaoShoppingsGroup">
+            <label for="shoppingsInput">Shoppings permitidos</label>
+            <select id="shoppingsInput" multiple size="6"></select>
+          </div>
 
-          <button id="salvarUsuarioButton" type="submit">Salvar Usuário</button>
-          <p id="usuarioMensagem" class="message"></p>
+          <button type="submit">Atualizar usuário</button>
+          <p id="usuarioMensagem" class="message" aria-live="polite"></p>
+        </form>
+      </div>
+    </div>
+
+    <div id="aprovacaoModal" class="modal" hidden>
+      <div class="modal-content">
+        <header class="modal-header">
+          <h3>Aprovar solicitação</h3>
+          <button id="fecharAprovacaoButton" type="button">Fechar</button>
+        </header>
+
+        <form id="aprovacaoForm">
+          <input id="aprovacaoUsuarioId" type="hidden" />
+          <p id="aprovacaoUsuarioResumo"></p>
+
+          <label for="aprovacaoPerfilInput">Perfil concedido</label>
+          <select id="aprovacaoPerfilInput" required>
+            <option value="">Selecione</option>
+          </select>
+
+          <div id="aprovacaoShoppingsGroup" hidden>
+            <label for="aprovacaoShoppingsInput">Shoppings permitidos</label>
+            <select
+              id="aprovacaoShoppingsInput"
+              multiple
+              size="6"
+            ></select>
+          </div>
+
+          <button type="submit">Confirmar aprovação</button>
+          <p id="aprovacaoMensagem" class="message" aria-live="polite"></p>
+        </form>
+      </div>
+    </div>
+
+    <div id="rejeicaoModal" class="modal" hidden>
+      <div class="modal-content">
+        <header class="modal-header">
+          <h3>Rejeitar solicitação</h3>
+          <button id="fecharRejeicaoButton" type="button">Fechar</button>
+        </header>
+
+        <form id="rejeicaoForm">
+          <input id="rejeicaoUsuarioId" type="hidden" />
+
+          <label for="motivoRejeicaoInput">Motivo da rejeição</label>
+          <textarea
+            id="motivoRejeicaoInput"
+            minlength="5"
+            maxlength="1000"
+            required
+          ></textarea>
+
+          <button type="submit" class="danger-action">
+            Confirmar rejeição
+          </button>
+          <p id="rejeicaoMensagem" class="message" aria-live="polite"></p>
         </form>
       </div>
     </div>

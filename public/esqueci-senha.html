@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Login - Portal GMV</title>
+    <title>Redefinir senha - Portal GMV</title>
     <link rel="stylesheet" href="/css/styles.css" />
   </head>
   <body>
@@ -13,29 +13,25 @@
           <img src="/img/logo.jpg" alt="GMV" />
         </div>
 
-        <h1>Acesso ao Portal</h1>
-        <p>Informe suas credenciais para continuar.</p>
+        <h1>Redefinir senha</h1>
+        <p>Enviaremos um link para o e-mail cadastrado.</p>
 
-        <form id="loginForm">
+        <form id="redefinicaoForm">
           <label for="email">E-mail</label>
           <input id="email" type="email" autocomplete="email" required />
 
-          <label for="senha">Senha</label>
-          <input id="senha" type="password" autocomplete="current-password" required />
-
-          <button type="submit">Entrar</button>
+          <button type="submit">Enviar link</button>
         </form>
 
         <div class="auth-links">
-          <a href="/solicitar-cadastro">Solicitar cadastro</a>
-          <a href="/esqueci-senha">Esqueci minha senha</a>
+          <a href="/login">Voltar para o login</a>
         </div>
 
-        <p id="mensagem" class="message"></p>
+        <p id="mensagem" class="message" aria-live="polite"></p>
       </section>
     </main>
 
     <script src="/js/api.js"></script>
-    <script src="/js/login.js"></script>
+    <script src="/js/esqueci-senha.js"></script>
   </body>
 </html>

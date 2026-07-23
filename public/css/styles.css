@@ -174,13 +174,25 @@ label {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
-  height: 40px;
   padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--white);
+  font: inherit;
+}
+
+input,
+select {
+  height: 40px;
+}
+
+textarea {
+  min-height: 120px;
+  padding: 10px 12px;
+  resize: vertical;
 }
 
 button {
@@ -208,6 +220,24 @@ button:hover {
 
 .message[data-status="success"] {
   color: #166534;
+}
+
+.auth-links {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  font-size: 14px;
+}
+
+.auth-links a {
+  color: var(--gmv-blue);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.auth-links a:hover {
+  text-decoration: underline;
 }
 
 .nav-group {
@@ -274,6 +304,23 @@ button:hover {
   grid-template-columns: minmax(220px, 1fr) 180px 160px auto;
   gap: 12px;
   margin-bottom: 18px;
+}
+
+.usuarios-filters {
+  grid-template-columns:
+    minmax(220px, 1fr)
+    170px
+    210px
+    160px
+    auto;
+}
+
+.usuarios-table-panel {
+  overflow-x: auto;
+}
+
+.usuarios-table-panel table {
+  min-width: 1100px;
 }
 
 .pagination {
@@ -343,11 +390,46 @@ button:hover {
   padding: 8px;
 }
 
+#edicaoShoppingsGroup,
+#aprovacaoShoppingsGroup {
+  display: grid;
+  gap: 12px;
+}
+
+#edicaoShoppingsGroup[hidden],
+#aprovacaoShoppingsGroup[hidden] {
+  display: none;
+}
+
+#aprovacaoShoppingsInput {
+  height: auto;
+  min-height: 140px;
+  padding: 8px;
+}
+
 .table-action {
   width: auto;
   height: 32px;
   padding: 0 12px;
   font-size: 13px;
+}
+
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.secondary-action {
+  background: var(--gmv-gray);
+}
+
+.danger-action {
+  background: var(--danger);
+}
+
+.danger-action:hover {
+  background: #991b1b;
 }
 
 td:nth-child(4),
@@ -597,4 +679,26 @@ th:nth-child(4) {
 .sortable-column.sort-desc::after {
   content: "↓";
   color: var(--gmv-blue);
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    position: static;
+    width: 100%;
+  }
+
+  .content {
+    margin-left: 0;
+    padding: 20px;
+  }
+
+  .filters-panel,
+  .usuarios-filters,
+  .faturamento-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-links {
+    flex-direction: column;
+  }
 }

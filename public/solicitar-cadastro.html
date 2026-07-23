@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Solicitar cadastro - Portal GMV</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <main class="login-page">
+      <section class="login-card">
+        <div class="brand">
+          <img src="/img/logo.jpg" alt="GMV" />
+        </div>
+
+        <h1>Solicitar cadastro</h1>
+        <p>Informe seus dados. A solicitação será analisada pela equipe.</p>
+
+        <form id="solicitacaoForm">
+          <label for="nome">Nome completo</label>
+          <input id="nome" type="text" autocomplete="name" required />
+
+          <label for="email">E-mail</label>
+          <input id="email" type="email" autocomplete="email" required />
+
+          <label for="shoppingId">Shopping solicitado</label>
+          <select id="shoppingId" required>
+            <option value="">Selecione</option>
+          </select>
+
+          <button type="submit">Enviar solicitação</button>
+        </form>
+
+        <div class="auth-links">
+          <a href="/login">Voltar para o login</a>
+        </div>
+
+        <p id="mensagem" class="message" aria-live="polite"></p>
+      </section>
+    </main>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/solicitar-cadastro.js"></script>
+  </body>
+</html>

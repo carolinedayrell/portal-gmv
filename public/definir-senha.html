@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Definir senha - Portal GMV</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <main class="login-page">
+      <section class="login-card">
+        <div class="brand">
+          <img src="/img/logo.jpg" alt="GMV" />
+        </div>
+
+        <h1>Definir senha</h1>
+        <p>
+          Use pelo menos 10 caracteres, com maiúscula, minúscula,
+          número e símbolo.
+        </p>
+
+        <form id="senhaForm">
+          <label for="senha">Nova senha</label>
+          <input
+            id="senha"
+            type="password"
+            autocomplete="new-password"
+            minlength="10"
+            required
+          />
+
+          <label for="confirmacao">Confirme a nova senha</label>
+          <input
+            id="confirmacao"
+            type="password"
+            autocomplete="new-password"
+            minlength="10"
+            required
+          />
+
+          <button type="submit">Definir senha</button>
+        </form>
+
+        <div class="auth-links">
+          <a href="/login">Voltar para o login</a>
+        </div>
+
+        <p id="mensagem" class="message" aria-live="polite"></p>
+      </section>
+    </main>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/definir-senha.js"></script>
+  </body>
+</html>

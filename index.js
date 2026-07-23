@@ -6,6 +6,7 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 
 
+const { iniciarProcessadorEmails } = require("./src/services/email-outbox.services");
 const authRoutes = require("./src/routes/auth.routes");
 const usuariosRoutes = require("./src/routes/usuarios.routes");
 const shoppingsRoutes = require("./src/routes/shoppings.routes");
@@ -39,6 +40,18 @@ app.get("/", (req, res) => {
 
 app.get("/login", (req, res) => {
   res.sendFile(path.join(publicPath, "login.html"));
+});
+
+app.get("/solicitar-cadastro", (req, res) => {
+  res.sendFile(path.join(publicPath, "solicitar-cadastro.html"));
+});
+
+app.get("/esqueci-senha", (req, res) => {
+  res.sendFile(path.join(publicPath, "esqueci-senha.html"));
+});
+
+app.get("/definir-senha", (req, res) => {
+  res.sendFile(path.join(publicPath, "definir-senha.html"));
 });
 
 app.get("/faturamento", (req, res) => {
@@ -90,6 +103,9 @@ app.listen(PORT, async () => {
       error
     );
   }
+
+iniciarProcessadorEmails();
+console.log("[EMAIL OUTBOX] Processador iniciado.");
 
   let falhasConsecutivasCache = 0;
 

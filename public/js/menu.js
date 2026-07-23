@@ -9,10 +9,17 @@ function renderMenu() {
   const currentPath = window.location.pathname;
   const usuario = getUsuarioLogado();
   const isMestre = usuario?.perfil === "MESTRE";
+  const gerenciaUsuarios =
+    isMestre || usuario?.perfil === "GERENTE_CSC";
 
-  const paginasRestritasMestre = ["/usuarios", "/shoppings", "/permissoes"];
+  const paginasRestritasGerenciaUsuarios = ["/usuarios"];
+  const paginasRestritasMestre = ["/shoppings", "/permissoes"];
 
-  if (!isMestre && paginasRestritasMestre.includes(currentPath)) {
+  if (
+    (!gerenciaUsuarios &&
+      paginasRestritasGerenciaUsuarios.includes(currentPath)) ||
+    (!isMestre && paginasRestritasMestre.includes(currentPath))
+  ) {
     window.location.href = "/";
     return;
   }
@@ -37,9 +44,16 @@ function renderMenu() {
       </div>
 
       ${
-        isMestre
+        gerenciaUsuarios
           ? `
             <a href="/usuarios" class="nav-link" data-path="/usuarios">Cadastro de Usuários</a>
+           `
+          : ""
+      }
+
+      ${
+        isMestre
+          ? `
             <a href="/shoppings" class="nav-link" data-path="/shoppings">Shoppings</a>
            `
           : ""
