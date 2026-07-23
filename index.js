@@ -88,24 +88,12 @@ const FATURAMENTO_CACHE_POLL_MAX_MS = Math.max(
   FATURAMENTO_CACHE_POLL_MS
 );
 
-app.listen(PORT, async () => {
+app.listen(PORT, () => {
   console.log(`Portal GMV rodando na porta ${PORT}`);
   console.log(`Acesse: http://localhost:${PORT}`);
 
-  try {
-    await faturamentoRoutes.inicializarCacheFaturamento();
-    console.log(
-      "[CACHE FATURAMENTO] Cache persistido carregado e cargas pendentes processadas."
-    );
-  } catch (error) {
-    console.error(
-      "[CACHE FATURAMENTO] Erro ao inicializar o cache persistido:",
-      error
-    );
-  }
-
-iniciarProcessadorEmails();
-console.log("[EMAIL OUTBOX] Processador iniciado.");
+  iniciarProcessadorEmails();
+  console.log("[EMAIL OUTBOX] Processador iniciado.");
 
   let falhasConsecutivasCache = 0;
 
@@ -136,5 +124,21 @@ console.log("[EMAIL OUTBOX] Processador iniciado.");
     }
   };
 
-  agendarVerificacaoCache(FATURAMENTO_CACHE_POLL_MS);
+  const inicializarCache = async () => {
+    try {
+      await faturamentoRoutes.inicializarCacheFaturamento();
+      console.log(
+        "[CACHE FATURAMENTO] Cache persistido carregado e cargas pendentes processadas."
+      );
+    } catch (error) {
+      console.error(
+        "[CACHE FATURAMENTO] Erro ao inicializar o cache persistido:",
+        error
+      );
+    } finally {
+      agendarVerificacaoCache(FATURAMENTO_CACHE_POLL_MS);
+    }
+  };
+
+  inicializarCache();
 });
