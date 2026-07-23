@@ -25,13 +25,44 @@ async function verificarSmtp() {
   await transporter.verify();
 }
 
+function criarRemetente(smtpUser, emailRemetente) {
+  const endereco = String(smtpUser || "").trim();
+
+  if (!endereco) {
+    throw new Error("SMTP_USER não configurado.");
+  }
+
+  const configurado = String(emailRemetente || "")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .trim();
+  const nomeComEndereco = configurado.match(
+    /^(.*?)\s*<[^>]+>\s*$/
+  );
+  const nomeConfigurado = nomeComEndereco
+    ? nomeComEndereco[1].trim()
+    : configurado.includes("@")
+      ? ""
+      : configurado;
+  const nome = nomeConfigurado
+    .replace(/^["']|["']$/g, "")
+    .trim();
+
+  return nome
+    ? { name: nome, address: endereco }
+    : endereco;
+}
+
 async function enviarEmail({ para, assunto, texto, html }) {
   if (!para) {
     throw new Error("Destinatário não informado.");
   }
 
   const info = await transporter.sendMail({
-    from: process.env.EMAIL_REMETENTE || process.env.SMTP_USER,
+    from: criarRemetente(
+      process.env.SMTP_USER,
+      process.env.EMAIL_REMETENTE
+    ),
     to: para,
     subject: assunto,
     text: texto,
@@ -114,6 +145,7 @@ function criarEmailDefinicaoSenha({ nome, link }) {
 }
 
 module.exports = {
+  criarRemetente,
   enviarEmail,
   verificarSmtp,
   criarEmailNovaSolicitacao,
