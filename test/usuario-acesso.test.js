@@ -54,12 +54,13 @@ test("IDs de shopping sao expandidos, limpos e deduplicados", () => {
   );
 });
 
-test("politica de senha exige todos os grupos", () => {
-  assert.equal(senhaAtendePolitica("Senha@1234"), true);
-  assert.equal(senhaAtendePolitica("senha@1234"), false);
-  assert.equal(senhaAtendePolitica("SENHA@1234"), false);
-  assert.equal(senhaAtendePolitica("SenhaSenha@"), false);
-  assert.equal(senhaAtendePolitica("Senha12345"), false);
+test("politica de senha exige seis caracteres, maiuscula e minuscula", () => {
+  assert.equal(senhaAtendePolitica("SenhaA"), true);
+  assert.equal(senhaAtendePolitica("Abcdef"), true);
+  assert.equal(senhaAtendePolitica("Ab1@cd"), true);
+  assert.equal(senhaAtendePolitica("abcde"), false);
+  assert.equal(senhaAtendePolitica("abcdef"), false);
+  assert.equal(senhaAtendePolitica("ABCDEF"), false);
 });
 
 test("sessao exige usuario aprovado, ativo e mesma versao", () => {

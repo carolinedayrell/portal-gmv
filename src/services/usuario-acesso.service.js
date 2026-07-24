@@ -62,11 +62,9 @@ function senhaAtendePolitica(senha) {
   const valor = String(senha || "");
 
   return (
-    valor.length >= 10 &&
+    valor.length >= 6 &&
     /[a-z]/.test(valor) &&
-    /[A-Z]/.test(valor) &&
-    /\d/.test(valor) &&
-    /[^A-Za-z0-9]/.test(valor)
+    /[A-Z]/.test(valor)
   );
 }
 

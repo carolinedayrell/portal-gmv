@@ -255,8 +255,8 @@ router.post("/definir-senha", redefinicaoLimiter, async (req, res) => {
     if (!senhaAtendePolitica(senha)) {
       return res.status(400).json({
         message:
-          "A senha deve possuir ao menos 10 caracteres, " +
-          "maiuscula, minuscula, numero e simbolo.",
+          "A senha deve possuir ao menos 6 caracteres, " +
+          "com letra maiuscula e minuscula.",
       });
     }
 

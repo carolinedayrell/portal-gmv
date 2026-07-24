@@ -169,14 +169,13 @@ router.get(
     try {
       const result = await pool.query(`
         SELECT
-          num_shopping::text AS id,
-          COALESCE(
-            nome_reduzido_coligada,
-            nome_shopping,
-            num_shopping::text
-          ) AS nome
+          MIN(num_shopping)::text AS id,
+          MIN(TRIM(nome_reduzido_coligada)) AS nome
         FROM gbi_shopping
         WHERE num_shopping IS NOT NULL
+          AND nome_reduzido_coligada IS NOT NULL
+          AND TRIM(nome_reduzido_coligada) <> ''
+        GROUP BY LOWER(TRIM(nome_reduzido_coligada))
         ORDER BY nome
       `);
 
@@ -490,12 +489,12 @@ router.get("/opcoes", authMiddleware, async (req, res) => {
 const shoppings = await pool.query(`
   SELECT
     STRING_AGG(num_shopping::text, ',' ORDER BY num_shopping::text) AS id,
-    nome_reduzido_coligada AS nome
+    MIN(TRIM(nome_reduzido_coligada)) AS nome
   FROM gbi_shopping
   WHERE nome_reduzido_coligada IS NOT NULL
     AND TRIM(nome_reduzido_coligada) <> ''
-  GROUP BY nome_reduzido_coligada
-  ORDER BY nome_reduzido_coligada
+  GROUP BY LOWER(TRIM(nome_reduzido_coligada))
+  ORDER BY nome
 `);
 
     res.json({
