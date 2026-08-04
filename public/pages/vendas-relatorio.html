@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+
+    <title>Relatórios - Vendas</title>
+
+    <link
+      rel="stylesheet"
+      href="/css/styles.css"
+    />
+  </head>
+
+  <body>
+    <aside
+      id="sidebar"
+      class="sidebar"
+    ></aside>
+
+    <main class="content">
+      <header class="page-header">
+        <div>
+          <h2>Vendas</h2>
+
+          <p>
+            Consulte as vendas por shopping, loja,
+            contrato e período.
+          </p>
+        </div>
+
+        <div class="table-actions">
+          <button
+            id="baixarModeloVendasButton"
+            type="button"
+          >
+            Baixar modelo
+          </button>
+
+          <button
+            id="importarVendasButton"
+            type="button"
+            disabled
+            title="É necessária permissão de criação para importar"
+          >
+            Importar vendas
+          </button>
+        </div>
+      </header>
+
+      <section class="panel filters-panel vendas-filters">
+        <div>
+          <label for="vendasDataInicial">
+            Data inicial
+          </label>
+
+          <input
+            id="vendasDataInicial"
+            type="date"
+          />
+        </div>
+
+        <div>
+          <label for="vendasDataFinal">
+            Data final
+          </label>
+
+          <input
+            id="vendasDataFinal"
+            type="date"
+          />
+        </div>
+
+        <div class="vendas-shopping-field">
+          <label for="vendasShoppingButton">
+            Shopping
+          </label>
+
+          <div
+            id="vendasShoppingDropdown"
+            class="filter-dropdown vendas-shopping-dropdown"
+          >
+            <button
+              id="vendasShoppingButton"
+              class="filter-button"
+              type="button"
+              aria-expanded="false"
+              disabled
+            >
+              Carregando shoppings...
+            </button>
+
+            <div class="filter-options">
+              <input
+                id="vendasShoppingBusca"
+                class="filter-search"
+                type="text"
+                placeholder="Buscar shopping"
+              />
+
+              <div id="vendasShoppingOpcoes">
+                <p class="filter-empty">
+                  Carregando shoppings...
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label for="vendasCanal">
+            Canal
+          </label>
+
+          <select id="vendasCanal">
+            <option value="">Todos</option>
+            <option value="LOJA_FISICA">
+              Loja física
+            </option>
+            <option value="ONLINE">
+              Online
+            </option>
+            <option value="CONSOLIDADO">
+              Consolidado
+            </option>
+          </select>
+        </div>
+
+        <div>
+          <label for="vendasLoja">
+            Loja
+          </label>
+
+          <input
+            id="vendasLoja"
+            type="search"
+            placeholder="Nome da loja"
+          />
+        </div>
+
+        <div>
+          <label for="vendasContrato">
+            Contrato
+          </label>
+
+          <input
+            id="vendasContrato"
+            type="search"
+            placeholder="Número do contrato"
+          />
+        </div>
+
+        <div>
+          <label for="vendasGranularidade">
+            Granularidade
+          </label>
+
+          <select id="vendasGranularidade">
+            <option value="">Todas</option>
+            <option value="MENSAL">Mensal</option>
+            <option value="DIARIA">Diária</option>
+          </select>
+        </div>
+
+        <button
+          id="filtrarVendasButton"
+          class="filter-submit"
+          type="button"
+          disabled
+          title="Aguarde o carregamento do relatório"
+        >
+          Filtrar
+        </button>
+      </section>
+
+      <section class="summary-grid">
+        <div class="panel">
+          <strong>Vendas no período</strong>
+          <p id="vendasValorTotal">
+            R$ 0,00
+          </p>
+        </div>
+
+        <div class="panel">
+          <strong>Contratos</strong>
+          <p id="vendasTotalContratos">
+            0
+          </p>
+        </div>
+
+        <div class="panel">
+          <strong>Lojas</strong>
+          <p id="vendasTotalLojas">
+            0
+          </p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="table-actions">
+          <button
+            id="exportarVendasButton"
+            type="button"
+            disabled
+            title="Aguarde o carregamento do relatório"
+          >
+            Exportar Excel
+          </button>
+        </div>
+
+        <table id="vendasTable">
+          <thead>
+            <tr>
+              <th>Período</th>
+              <th>Data</th>
+              <th>Shopping</th>
+              <th>Contrato</th>
+              <th>LUC</th>
+              <th>Loja</th>
+              <th>ABL</th>
+              <th>Canal</th>
+              <th>Vendas</th>
+            </tr>
+          </thead>
+
+          <tbody id="vendasTableBody">
+            <tr>
+              <td colspan="9">
+                O relatório será carregado quando
+                a API de consulta estiver pronta.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="pagination">
+          <button
+            id="vendasPaginaAnteriorButton"
+            type="button"
+            disabled
+          >
+            Anterior
+          </button>
+
+          <span id="vendasPaginaInfo">Página 1</span>
+
+          <button
+            id="vendasProximaPaginaButton"
+            type="button"
+            disabled
+          >
+            Próxima
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/menu.js"></script>
+    <script src="/js/pages/vendas-relatorio.js"></script>
+  </body>
+</html>

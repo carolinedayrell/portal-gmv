@@ -11,6 +11,8 @@ const authRoutes = require("./src/routes/auth.routes");
 const usuariosRoutes = require("./src/routes/usuarios.routes");
 const shoppingsRoutes = require("./src/routes/shoppings.routes");
 const faturamentoRoutes = require("./src/routes/faturamento.routes");
+const vendasRoutes = require("./src/routes/vendas.routes");
+
 
 const app = express();
 const publicPath = path.join(__dirname, "public");
@@ -20,6 +22,7 @@ app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
 app.use(express.static(publicPath));
 app.use("/api/faturamento", faturamentoRoutes);
+app.use(  "/api/vendas",  vendasRoutes);
 
 
 app.get("/health", (req, res) => {
@@ -75,7 +78,27 @@ app.get("/shoppings", (req, res) => {
 });
 
 app.get("/vendas", (req, res) => {
-  res.sendFile(path.join(publicPath, "pages/vendas.html"));
+  return res.redirect("/vendas/relatorio");
+});
+
+app.get("/vendas/relatorio", (req, res) => {
+  res.sendFile(
+    path.join(
+      publicPath,
+      "pages",
+      "vendas-relatorio.html"
+    )
+  );
+});
+
+app.get("/vendas/importacao", (req, res) => {
+  res.sendFile(
+    path.join(
+      publicPath,
+      "pages",
+      "vendas-importacao.html"
+    )
+  );
 });
 
 const PORT = process.env.PORT || 4000;

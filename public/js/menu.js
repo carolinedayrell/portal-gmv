@@ -11,6 +11,14 @@ function renderMenu() {
   const isMestre = usuario?.perfil === "MESTRE";
   const gerenciaUsuarios =
     isMestre || usuario?.perfil === "GERENTE_CSC";
+  const permissoes = JSON.parse(
+    localStorage.getItem("@portalGMV:permissoes") || "[]"
+  );
+  const podeCriarVendas = permissoes.some(
+    (permissao) =>
+      String(permissao.modulo).toUpperCase() === "VENDAS" &&
+      permissao.pode_criar
+  );
 
   const paginasRestritasGerenciaUsuarios = ["/usuarios"];
   const paginasRestritasMestre = ["/shoppings", "/permissoes"];
@@ -66,6 +74,11 @@ function renderMenu() {
 
         <div class="nav-submenu" data-submenu="vendas">
           <a href="/vendas/relatorio" class="nav-link" data-path="/vendas/relatorio">Relatórios</a>
+          ${
+            podeCriarVendas
+              ? `<a href="/vendas/importacao" class="nav-link" data-path="/vendas/importacao">Importar</a>`
+              : ""
+          }
         </div>
       </div>
     </nav>

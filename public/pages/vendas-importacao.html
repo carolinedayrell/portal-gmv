@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+
+    <title>Importação - Vendas</title>
+
+    <link
+      rel="stylesheet"
+      href="/css/styles.css"
+    />
+  </head>
+
+  <body>
+    <aside
+      id="sidebar"
+      class="sidebar"
+    ></aside>
+
+    <main class="content">
+      <header class="page-header">
+        <div>
+          <h2>Importação de vendas</h2>
+
+          <p>
+            Selecione o arquivo oficial e confira as
+            regras antes de iniciar a validação.
+          </p>
+        </div>
+
+        <div class="table-actions">
+          <button
+            id="voltarRelatorioVendasButton"
+            class="secondary-action"
+            type="button"
+          >
+            Voltar ao relatório
+          </button>
+
+          <button
+            id="baixarModeloImportacaoButton"
+            type="button"
+          >
+            Baixar modelo
+          </button>
+        </div>
+      </header>
+
+      <div class="vendas-importacao-layout">
+        <section class="panel vendas-importacao-alerta">
+          <h3>Leia antes de importar</h3>
+
+          <ul>
+            <li>
+              <strong>Contrato é obrigatório.</strong>
+              O sistema usará o contrato para identificar
+              o shopping e os dados oficiais da loja.
+            </li>
+
+            <li>
+              A LUC não deve ser informada no arquivo: ela
+              será sempre obtida pelo Contrato.
+            </li>
+
+            <li>
+              Loja e ABL são opcionais. Quando informadas,
+              serão comparadas com o cadastro do sistema.
+            </li>
+
+            <li>
+              Os dados oficiais de Shopping, LUC e ABL
+              prevalecerão no dado gravado.
+            </li>
+
+            <li>
+              No formato diário, todos os dias do período
+              precisam estar detalhados. Dia sem venda deve
+              ser informado com valor zero.
+            </li>
+
+            <li>
+              Vendas online referentes ao período podem ser
+              informadas como mensais, separadas do canal de
+              loja física.
+            </li>
+
+            <li>
+              A substituição afetará somente as chaves
+              presentes no arquivo. Lojas ausentes manterão
+              os valores ativos anteriores.
+            </li>
+
+            <li>
+              Se uma única linha contiver shopping não
+              autorizado, a carga inteira será rejeitada.
+            </li>
+
+            <li>
+              Caso o arquivo não possa ser processado, o
+              resultado informará a linha, o campo e o motivo
+              do erro sempre que essas informações estiverem
+              disponíveis.
+            </li>
+          </ul>
+
+          <label class="vendas-aceite-regras">
+            <input
+              id="aceitarRegrasVendasInput"
+              type="checkbox"
+            />
+
+            <span>
+              Li e compreendi as regras acima. Sei que o
+              aceite não desativa nenhuma validação.
+            </span>
+          </label>
+        </section>
+
+        <section class="panel vendas-upload-panel">
+          <div>
+            <h3>Selecionar arquivo</h3>
+
+            <p class="vendas-colunas-esperadas">
+              Colunas esperadas: Período, Data, Shopping,
+              Contrato, Loja, ABL, Canal e Vendas.
+            </p>
+          </div>
+
+          <input
+            id="arquivoVendasInput"
+            type="file"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            hidden
+          />
+
+          <div class="vendas-upload-actions">
+            <button
+              id="selecionarArquivoVendasButton"
+              type="button"
+            >
+              Escolher arquivo
+            </button>
+
+            <button
+              id="validarArquivoVendasButton"
+              type="button"
+              disabled
+            >
+              Validar arquivo
+            </button>
+          </div>
+
+          <p
+            id="arquivoVendasInfo"
+            class="vendas-arquivo-info"
+          >
+            Nenhum arquivo selecionado. Utilize somente o
+            formato .xlsx, com tamanho máximo de 10 MB.
+          </p>
+
+          <p class="vendas-importacao-nota">
+            A validação registra o histórico da tentativa e
+            prepara uma prévia. Nenhuma venda será ativada ou
+            substituída antes da confirmação final.
+          </p>
+        </section>
+
+        <section
+          id="vendasImportacaoResultado"
+          class="panel vendas-resultado-panel"
+          hidden
+        >
+          <div class="page-header vendas-resultado-header">
+            <div>
+              <h3>Resultado da validação</h3>
+              <p id="vendasImportacaoStatus"></p>
+            </div>
+
+            <button
+              id="baixarOcorrenciasVendasButton"
+              type="button"
+              disabled
+            >
+              Baixar ocorrências
+            </button>
+          </div>
+
+          <div class="summary-grid vendas-validacao-resumo">
+            <div class="panel">
+              <strong>Linhas</strong>
+              <p id="vendasValidacaoTotalLinhas">0</p>
+            </div>
+
+            <div class="panel">
+              <strong>Erros</strong>
+              <p id="vendasValidacaoTotalErros">0</p>
+            </div>
+
+            <div class="panel">
+              <strong>Divergências</strong>
+              <p id="vendasValidacaoTotalDivergencias">0</p>
+            </div>
+
+            <div class="panel">
+              <strong>Total informado</strong>
+              <p id="vendasValidacaoTotalVendas">R$ 0,00</p>
+            </div>
+          </div>
+
+          <h4>Ocorrências encontradas</h4>
+
+          <div class="vendas-table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Linha</th>
+                  <th>Severidade</th>
+                  <th>Campo</th>
+                  <th>Motivo</th>
+                  <th>Informado</th>
+                  <th>Sistema</th>
+                  <th>Orientação</th>
+                </tr>
+              </thead>
+
+              <tbody id="vendasOcorrenciasTableBody"></tbody>
+            </table>
+          </div>
+
+          <h4>Prévia: informado x sistema</h4>
+
+          <div class="vendas-table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Linha</th>
+                  <th>Contrato</th>
+                  <th>Shopping informado</th>
+                  <th>Shopping do sistema</th>
+                  <th>LUCs do sistema</th>
+                  <th>ABL informada</th>
+                  <th>ABL do sistema</th>
+                  <th>Vendas</th>
+                  <th>Resultado</th>
+                </tr>
+              </thead>
+
+              <tbody id="vendasPreviewTableBody"></tbody>
+            </table>
+          </div>
+
+          <div
+            id="vendasConfirmacaoArea"
+            class="vendas-confirmacao-area"
+            hidden
+          >
+            <label class="vendas-aceite-regras">
+              <input
+                id="confirmarDivergenciasVendasInput"
+                type="checkbox"
+              />
+
+              <span>
+                Revisei as divergências e confirmo o uso dos
+                dados oficiais apresentados pelo sistema.
+              </span>
+            </label>
+
+            <button
+              id="confirmarImportacaoVendasButton"
+              type="button"
+              disabled
+            >
+              Confirmar importação
+            </button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="page-header vendas-resultado-header">
+            <div>
+              <h3>Histórico recente</h3>
+              <p>
+                Importações visíveis conforme seu perfil e
+                seus vínculos atuais de shopping.
+              </p>
+            </div>
+          </div>
+
+          <div class="vendas-table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Arquivo</th>
+                  <th>Status</th>
+                  <th>Responsável pelo envio</th>
+                  <th>Responsável pela confirmação</th>
+                  <th>Linhas</th>
+                  <th>Vendas</th>
+                  <th>Enviado em</th>
+                </tr>
+              </thead>
+
+              <tbody id="vendasHistoricoTableBody">
+                <tr>
+                  <td colspan="8">
+                    Carregando histórico...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/menu.js"></script>
+    <script src="/js/pages/vendas-importacao.js"></script>
+  </body>
+</html>
