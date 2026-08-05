@@ -5,6 +5,7 @@
   "type": "commonjs",
   "scripts": {
     "dev": "nodemon index.js",
+    "etl:totvs-financeiro": "node scripts/etl-totvs-financeiro.js",
     "start": "node index.js",
     "test": "node --test"
   },
@@ -17,7 +18,10 @@
     "express": "^5.1.0",
     "express-rate-limit": "^8.6.0",
     "jsonwebtoken": "^9.0.2",
+    "jszip": "^3.10.1",
+    "node-cron": "^4.2.1",
     "nodemailer": "^9.0.3",
+    "oracledb": "^6.9.0",
     "pg": "^8.16.3"
   },
   "devDependencies": {

@@ -681,6 +681,220 @@ th:nth-child(4) {
   color: var(--gmv-blue);
 }
 
+.vendas-filters {
+  grid-template-columns: repeat(6, minmax(150px, 1fr));
+  align-items: end;
+}
+
+.vendas-shopping-field {
+  grid-column: span 2;
+}
+
+.vendas-filters > div {
+  display: grid;
+  gap: 6px;
+}
+
+#vendasDataInicial,
+#vendasDataFinal,
+#vendasCanal,
+#vendasLoja,
+#vendasContrato,
+#vendasGranularidade {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+}
+
+.vendas-shopping-field .filter-options {
+  width: min(420px, calc(100vw - 40px));
+}
+
+.vendas-shopping-dropdown .filter-button {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vendas-shopping-dropdown
+  .filter-option
+  input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.vendas-shopping-dropdown .filter-option span {
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+#filtrarVendasButton {
+  width: 100%;
+  min-width: 110px;
+  height: 40px;
+  padding: 0 16px;
+  align-self: end;
+}
+
+.vendas-importacao-layout {
+  display: grid;
+  gap: 18px;
+}
+
+.vendas-importacao-alerta {
+  border-left: 5px solid #d97706;
+  background: #fffbeb;
+}
+
+.vendas-importacao-alerta h3,
+.vendas-upload-panel h3 {
+  margin: 0 0 12px;
+}
+
+.vendas-importacao-alerta ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.vendas-importacao-alerta strong {
+  color: #92400e;
+}
+
+.vendas-aceite-regras {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 12px;
+  border: 1px solid #f59e0b;
+  border-radius: 6px;
+  background: var(--white);
+  cursor: pointer;
+}
+
+.vendas-aceite-regras input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  margin: 1px 0 0;
+}
+
+.vendas-aceite-regras span {
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.vendas-upload-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.vendas-upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.vendas-upload-actions button {
+  width: auto;
+  padding: 0 18px;
+}
+
+.vendas-arquivo-info {
+  margin: 0;
+  color: var(--muted);
+}
+
+.vendas-arquivo-info[data-status="success"] {
+  color: #166534;
+  font-weight: 700;
+}
+
+.vendas-arquivo-info[data-status="error"] {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.vendas-colunas-esperadas {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.vendas-importacao-nota {
+  margin: 0;
+  padding: 12px;
+  border-radius: 6px;
+  background: #eaf3f8;
+  color: var(--gmv-blue-dark);
+}
+
+.vendas-resultado-panel[hidden],
+.vendas-confirmacao-area[hidden] {
+  display: none;
+}
+
+.vendas-resultado-header {
+  margin-bottom: 18px;
+}
+
+.vendas-resultado-header button {
+  width: auto;
+  padding: 0 18px;
+}
+
+.vendas-validacao-resumo {
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+}
+
+.vendas-table-scroll {
+  max-width: 100%;
+  margin-bottom: 22px;
+  overflow-x: auto;
+}
+
+.vendas-table-scroll table {
+  min-width: 1100px;
+}
+
+.vendas-resultado-panel h4 {
+  margin: 20px 0 10px;
+}
+
+.vendas-severidade-erro {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.vendas-severidade-divergencia {
+  color: #92400e;
+  font-weight: 700;
+}
+
+.vendas-severidade-aviso {
+  color: var(--gmv-blue);
+  font-weight: 700;
+}
+
+.vendas-confirmacao-area {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.vendas-confirmacao-area button {
+  width: max-content;
+  padding: 0 20px;
+}
+
 @media (max-width: 900px) {
   .sidebar {
     position: static;
@@ -692,10 +906,34 @@ th:nth-child(4) {
     padding: 20px;
   }
 
+  #filtrarVendasButton {
+    width: 100%;
+  }
+
+  .vendas-upload-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .vendas-upload-actions button {
+    width: 100%;
+  }
+
+  .vendas-validacao-resumo {
+    grid-template-columns: 1fr;
+  }
+
+  .vendas-confirmacao-area button {
+    width: 100%;
+  }
   .filters-panel,
   .usuarios-filters,
   .faturamento-filters {
     grid-template-columns: 1fr;
+  }
+
+  .vendas-shopping-field {
+    grid-column: span 1;
   }
 
   .auth-links {
