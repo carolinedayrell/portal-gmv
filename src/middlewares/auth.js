@@ -39,7 +39,12 @@ async function authMiddleware(req, res, next) {
       message: "Sessao invalida ou expirada.",
     });
   }
-
+if (decoded.finalidade) {
+  return res.status(401).json({
+    message:
+      "Este token nao permite acessar o portal.",
+  });
+}
   try {
     const result = await pool.query(
       `
@@ -47,6 +52,7 @@ async function authMiddleware(req, res, next) {
         id,
         nome,
         email,
+        telefone,
         perfil,
         ativo,
         status_cadastro,
@@ -70,6 +76,7 @@ async function authMiddleware(req, res, next) {
       id: usuario.id,
       nome: usuario.nome,
       email: usuario.email,
+      telefone: usuario.telefone,
       perfil: usuario.perfil,
       primeiroAcesso: usuario.primeiro_acesso,
       versaoSessao: usuario.versao_sessao,

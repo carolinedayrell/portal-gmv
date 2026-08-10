@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Definir senha - Portal GMV</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <main class="login-page">
+      <section class="login-card">
+        <div class="brand">
+          <img src="/img/logo.jpg" alt="GMV" />
+        </div>
+
+<h1>Alteração obrigatória de senha</h1>
+<p>
+  Sua senha atual é provisória. Defina uma nova senha para continuar.
+</p>
+
+        <form id="senhaForm">
+          <label for="senha">Nova senha</label>
+          <input
+            id="senha"
+            type="password"
+            autocomplete="new-password"
+            minlength="6"
+            required
+          />
+
+          <label for="confirmacao">Confirme a nova senha</label>
+          <input
+            id="confirmacao"
+            type="password"
+            autocomplete="new-password"
+            minlength="6"
+            required
+          />
+
+          <button type="submit">Definir senha</button>
+        </form>
+
+        <div class="auth-links">
+          <a href="/login">Voltar para o login</a>
+        </div>
+
+        <p id="mensagem" class="message" aria-live="polite"></p>
+      </section>
+    </main>
+
+<script src="/js/api.js"></script>
+<script src="/js/alterar-senha-inicial.js"></script>
+  </body>
+</html>

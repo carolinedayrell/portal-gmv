@@ -57,6 +57,10 @@ app.get("/definir-senha", (req, res) => {
   res.sendFile(path.join(publicPath, "definir-senha.html"));
 });
 
+app.get("/alterar-senha-inicial", (req, res) => {
+    res.sendFile(path.join(publicPath,"alterar-senha-inicial.html"));
+});
+
 app.get("/faturamento", (req, res) => {
   res.sendFile(path.join(publicPath, "pages/faturamento.html"));
 });
@@ -71,6 +75,16 @@ app.get("/faturamento/gerar-tabelas", (req, res) => {
 
 app.get("/usuarios", (req, res) => {
   res.sendFile(path.join(publicPath, "pages/usuarios.html"));
+});
+
+app.get("/meu-perfil", (req, res) => {
+  res.sendFile(
+    path.join(
+      publicPath,
+      "pages",
+      "meu-perfil.html"
+    )
+  );
 });
 
 app.get("/shoppings", (req, res) => {

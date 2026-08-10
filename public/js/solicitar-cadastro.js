@@ -34,6 +34,7 @@ form.addEventListener("submit", async (event) => {
       body: JSON.stringify({
         nome: document.getElementById("nome").value,
         email: document.getElementById("email").value,
+        telefone: document.getElementById("telefone").value,
         shoppingId: shoppingInput.value,
       }),
     });

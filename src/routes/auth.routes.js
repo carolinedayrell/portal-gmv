@@ -71,6 +71,9 @@ router.post("/login", loginLimiter, async (req, res) => {
         ativo,
         status_cadastro,
         primeiro_acesso,
+        credencial_versao,
+credencial_expira_em,
+credencial_utilizada_em,
         versao_sessao
       FROM portal_usuarios
       WHERE LOWER(TRIM(email)) = $1
@@ -100,6 +103,40 @@ router.post("/login", loginLimiter, async (req, res) => {
         message: "Usuario ou senha invalidos.",
       });
     }
+
+if (usuario.primeiro_acesso) {
+  if (
+    !usuario.credencial_expira_em ||
+    new Date(usuario.credencial_expira_em) <= new Date()
+  ) {
+    return res.status(403).json({
+      codigo: "SENHA_PROVISORIA_EXPIRADA",
+      message:
+        "A senha provisoria expirou. Solicite uma nova senha ao Mestre.",
+    });
+  }
+
+  const tokenTrocaSenha = jwt.sign(
+    {
+      sub: usuario.id,
+      finalidade: "TROCA_SENHA_INICIAL",
+      credencialVersao:
+        usuario.credencial_versao,
+      versaoSessao:
+        usuario.versao_sessao,
+    },
+    process.env.JWT_SECRET,
+    {
+      algorithm: "HS256",
+      expiresIn: "15m",
+    }
+  );
+
+  return res.json({
+    trocaSenhaObrigatoria: true,
+    tokenTrocaSenha,
+  });
+}
 
     const token = jwt.sign(
       {
@@ -334,6 +371,171 @@ router.post("/definir-senha", redefinicaoLimiter, async (req, res) => {
     client?.release();
   }
 });
+
+router.post(
+  "/alterar-senha-inicial",
+  redefinicaoLimiter,
+  async (req, res) => {
+    let client;
+    let transacaoAberta = false;
+
+    try {
+      const token = String(req.body.token || "");
+      const senha = String(req.body.senha || "");
+      const confirmacao = String(
+        req.body.confirmacao || ""
+      );
+
+      if (!token || !senha || !confirmacao) {
+        return res.status(400).json({
+          message:
+            "Informe token, senha e confirmacao.",
+        });
+      }
+
+      if (senha !== confirmacao) {
+        return res.status(400).json({
+          message: "As senhas nao conferem.",
+        });
+      }
+
+      if (!senhaAtendePolitica(senha)) {
+        return res.status(400).json({
+          message:
+            "A senha deve possuir ao menos 6 caracteres, " +
+            "com letra maiuscula e minuscula.",
+        });
+      }
+
+      const decoded = jwt.verify(
+        token,
+        process.env.JWT_SECRET,
+        {
+          algorithms: ["HS256"],
+        }
+      );
+
+      if (
+        decoded.finalidade !==
+        "TROCA_SENHA_INICIAL"
+      ) {
+        return res.status(400).json({
+          message: "Token invalido.",
+        });
+      }
+
+      client = await pool.connect();
+      await client.query("BEGIN");
+      transacaoAberta = true;
+
+      const result = await client.query(
+        `
+        SELECT
+          id,
+          senha_hash,
+          ativo,
+          status_cadastro,
+          primeiro_acesso,
+          credencial_versao,
+          credencial_expira_em,
+          credencial_utilizada_em,
+          versao_sessao
+        FROM portal_usuarios
+        WHERE id = $1
+        FOR UPDATE
+        `,
+        [decoded.sub]
+      );
+
+      const usuario = result.rows[0];
+
+      if (
+        !usuario ||
+        !usuario.ativo ||
+        usuario.status_cadastro !== "APROVADO" ||
+        !usuario.primeiro_acesso ||
+        usuario.credencial_utilizada_em ||
+        Number(usuario.credencial_versao) !==
+          Number(decoded.credencialVersao) ||
+        Number(usuario.versao_sessao) !==
+          Number(decoded.versaoSessao) ||
+        !usuario.credencial_expira_em ||
+        new Date(usuario.credencial_expira_em) <=
+          new Date()
+      ) {
+        await rollbackSeguro(
+          client,
+          transacaoAberta
+        );
+        transacaoAberta = false;
+
+        return res.status(400).json({
+          message:
+            "Token invalido, utilizado ou expirado.",
+        });
+      }
+
+      const mesmaSenha = await bcrypt.compare(
+        senha,
+        usuario.senha_hash
+      );
+
+      if (mesmaSenha) {
+        await rollbackSeguro(
+          client,
+          transacaoAberta
+        );
+        transacaoAberta = false;
+
+        return res.status(400).json({
+          message:
+            "A nova senha deve ser diferente da senha provisoria.",
+        });
+      }
+
+      const senhaHash = await bcrypt.hash(
+        senha,
+        10
+      );
+
+      await client.query(
+        `
+        UPDATE portal_usuarios
+        SET
+          senha_hash = $2,
+          primeiro_acesso = FALSE,
+          credencial_utilizada_em = NOW(),
+          credencial_expira_em = NULL,
+          versao_sessao = versao_sessao + 1,
+          atualizado_em = NOW()
+        WHERE id = $1
+          AND primeiro_acesso = TRUE
+        `,
+        [usuario.id, senhaHash]
+      );
+
+      await client.query("COMMIT");
+      transacaoAberta = false;
+
+      return res.json({
+        message:
+          "Senha alterada com sucesso. Faca seu login.",
+      });
+    } catch (error) {
+      await rollbackSeguro(
+        client,
+        transacaoAberta
+      );
+
+      return res.status(400).json({
+        message:
+          "Token invalido ou expirado.",
+      });
+    } finally {
+      client?.release();
+    }
+  }
+);
 
 router.get("/me", authMiddleware, async (req, res) => {
   return res.json({

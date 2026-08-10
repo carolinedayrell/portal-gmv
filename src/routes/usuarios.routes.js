@@ -12,9 +12,12 @@ const {
   PERFIS_VALIDOS,
   normalizarPerfil,
   normalizarShoppingIds,
+  normalizarTelefone,
+  perfilEhMestre,
   podeAlterarUsuario,
   podeConcederPerfil,
   podeGerenciarUsuarios,
+  senhaAtendePolitica,
 } = require("../services/usuario-acesso.service");
 
 const solicitacaoLimiter = rateLimit({
@@ -200,11 +203,12 @@ router.post(
       const email = String(req.body.email || "")
         .trim()
         .toLowerCase();
+      const telefone = normalizarTelefone(req.body.telefone);
       const shoppingId = String(req.body.shoppingId || "").trim();
 
-      if (!nome || !email || !shoppingId) {
+      if (!nome || !email || !telefone || !shoppingId) {
         return res.status(400).json({
-          message: "Informe nome, e-mail e shopping.",
+          message: "Informe nome, e-mail, celular e shopping.",
         });
       }
 
@@ -244,6 +248,7 @@ router.post(
         INSERT INTO portal_usuarios (
           nome,
           email,
+          telefone,
           senha_hash,
           perfil,
           ativo,
@@ -254,16 +259,17 @@ router.post(
         VALUES (
           $1,
           $2,
+          $3,
           NULL,
           NULL,
           FALSE,
           'AGUARDANDO_APROVACAO',
-          $3,
+          $4,
           NOW()
         )
         RETURNING id
         `,
-        [nome, email, shoppingId]
+        [nome, email, telefone, shoppingId]
       );
 
       const usuarioId = usuarioResult.rows[0].id;
@@ -358,8 +364,26 @@ router.get("/", authMiddleware, async (req, res) => {
     const where = [];
 
     if (busca) {
-      params.push(`%${busca}%`);
-      where.push(`(u.nome ILIKE $${params.length} OR u.email ILIKE $${params.length})`);
+      const buscaNormalizada = String(busca).trim();
+      const telefoneBusca = buscaNormalizada.replace(/\D/g, "");
+
+      params.push(`%${buscaNormalizada}%`);
+      const buscaPosicao = params.length;
+
+      if (telefoneBusca) {
+        params.push(`%${telefoneBusca}%`);
+        const telefonePosicao = params.length;
+        where.push(
+          `(u.nome ILIKE $${buscaPosicao} ` +
+            `OR u.email ILIKE $${buscaPosicao} ` +
+            `OR u.telefone ILIKE $${telefonePosicao})`
+        );
+      } else {
+        where.push(
+          `(u.nome ILIKE $${buscaPosicao} ` +
+            `OR u.email ILIKE $${buscaPosicao})`
+        );
+      }
     }
 
     if (perfil) {
@@ -395,6 +419,7 @@ router.get("/", authMiddleware, async (req, res) => {
       SELECT
         u.id,
         u.nome,
+        u.telefone,
         u.email,
         u.perfil,
         u.ativo,
@@ -986,16 +1011,397 @@ router.post(
 
 
 router.post("/", authMiddleware, async (req, res) => {
-  try {
-    const gerenciador = await obterGerenciadorUsuarios(pool, req, res);
-    if (!gerenciador) return;
+  let client;
+  let transacaoAberta = false;
 
-    return res.status(405).json({
+  try {
+    const nome = String(req.body.nome || "").trim();
+    const email = String(req.body.email || "")
+      .trim()
+      .toLowerCase();
+    const telefone = normalizarTelefone(req.body.telefone);
+    const perfil = normalizarPerfil(req.body.perfil);
+    const shoppingIds = normalizarShoppingIds(
+      req.body.shoppingIds || []
+    );
+    const senhaProvisoria = String(
+      req.body.senhaProvisoria || ""
+    );
+    const confirmacaoSenha = String(
+      req.body.confirmacaoSenha || ""
+    );
+
+    if (!nome || !email || !telefone || !perfil) {
+      return res.status(400).json({
+        message: "Informe nome, e-mail, celular e perfil.",
+      });
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({
+        message: "Informe um e-mail valido.",
+      });
+    }
+
+    if (!PERFIS_VALIDOS.has(perfil)) {
+      return res.status(400).json({
+        message: "Perfil invalido.",
+      });
+    }
+
+    if (!senhaProvisoria || senhaProvisoria !== confirmacaoSenha) {
+      return res.status(400).json({
+        message: "Informe e confirme a mesma senha provisoria.",
+      });
+    }
+
+    if (!senhaAtendePolitica(senhaProvisoria)) {
+      return res.status(400).json({
+        message:
+          "A senha provisoria deve possuir ao menos 6 caracteres, " +
+          "com letra maiuscula e minuscula.",
+      });
+    }
+
+    if (perfil === "GERENTE_SHOPPING" && !shoppingIds.length) {
+      return res.status(400).json({
+        message:
+          "Selecione pelo menos um shopping para o Gerente Shopping.",
+      });
+    }
+
+    client = await pool.connect();
+    await client.query("BEGIN");
+    transacaoAberta = true;
+
+    const gerenciador = await obterGerenciadorUsuarios(
+      client,
+      req,
+      res
+    );
+
+    if (!gerenciador) {
+      await rollbackSeguro(client, transacaoAberta);
+      transacaoAberta = false;
+      return;
+    }
+
+    if (!perfilEhMestre(gerenciador.perfil)) {
+      await rollbackSeguro(client, transacaoAberta);
+      transacaoAberta = false;
+      return res.status(403).json({
+        message: "Apenas o Mestre pode criar usuarios.",
+      });
+    }
+
+    if (perfil === "GERENTE_SHOPPING") {
+      const idsInvalidos = await obterShoppingIdsInvalidos(
+        client,
+        shoppingIds
+      );
+
+      if (idsInvalidos.length) {
+        await rollbackSeguro(client, transacaoAberta);
+        transacaoAberta = false;
+        return res.status(400).json({
+          message: "Um ou mais shoppings informados sao invalidos.",
+        });
+      }
+    }
+
+    const senhaHash = await bcrypt.hash(senhaProvisoria, 10);
+
+    const usuarioResult = await client.query(
+      `
+      INSERT INTO portal_usuarios (
+        nome,
+        email,
+        telefone,
+        senha_hash,
+        perfil,
+        ativo,
+        status_cadastro,
+        analisado_em,
+        analisado_por,
+        primeiro_acesso,
+        credencial_versao,
+        credencial_expira_em,
+        credencial_utilizada_em,
+        versao_sessao
+      )
+      VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        TRUE,
+        'APROVADO',
+        NOW(),
+        $6,
+        TRUE,
+        1,
+        NOW() + INTERVAL '24 hours',
+        NULL,
+        1
+      )
+      RETURNING
+        id,
+        nome,
+        email,
+        telefone,
+        perfil,
+        ativo,
+        primeiro_acesso
+      `,
+      [
+        nome,
+        email,
+        telefone,
+        senhaHash,
+        perfil,
+        gerenciador.id,
+      ]
+    );
+
+    const usuarioCriado = usuarioResult.rows[0];
+
+    if (perfil === "GERENTE_SHOPPING") {
+      await client.query(
+        `
+        INSERT INTO portal_usuario_shopping (
+          usuario_id,
+          coligada_totvs
+        )
+        SELECT $1, shopping_id
+        FROM UNNEST($2::text[]) AS shopping_id
+        ON CONFLICT (usuario_id, coligada_totvs) DO NOTHING
+        `,
+        [usuarioCriado.id, shoppingIds]
+      );
+    }
+
+    await client.query(
+      `
+      INSERT INTO portal_usuario_aprovacao_historico (
+        usuario_id,
+        status_anterior,
+        status_novo,
+        perfil_concedido,
+        shopping_ids_aprovados,
+        responsavel_id,
+        motivo
+      )
+      VALUES ($1, NULL, 'APROVADO', $2, $3::text[], $4, $5)
+      `,
+      [
+        usuarioCriado.id,
+        perfil,
+        perfil === "GERENTE_SHOPPING" ? shoppingIds : [],
+        gerenciador.id,
+        "Usuario criado diretamente pelo Mestre",
+      ]
+    );
+
+    await client.query("COMMIT");
+    transacaoAberta = false;
+
+    return res.status(201).json({
       message:
-        "O cadastro direto foi desativado. Utilize a solicitacao publica e o fluxo de aprovacao.",
+        "Usuario criado. A senha provisoria deve ser alterada no primeiro acesso.",
+      usuario: usuarioCriado,
     });
   } catch (error) {
-    responderErroUsuario(res, error, "validar o cadastro de usuario");
+    await rollbackSeguro(client, transacaoAberta);
+    return responderErroUsuario(res, error, "criar usuario");
+  } finally {
+    client?.release();
+  }
+});
+
+router.post(
+  "/:id/senha-provisoria",
+  authMiddleware,
+  async (req, res) => {
+    let client;
+    let transacaoAberta = false;
+
+    try {
+      const usuarioId = Number(req.params.id);
+      const senhaProvisoria = String(
+        req.body.senhaProvisoria || ""
+      );
+      const confirmacaoSenha = String(
+        req.body.confirmacaoSenha || ""
+      );
+
+      if (!Number.isInteger(usuarioId) || usuarioId <= 0) {
+        return res.status(400).json({
+          message: "Usuario invalido.",
+        });
+      }
+
+      if (!senhaProvisoria || senhaProvisoria !== confirmacaoSenha) {
+        return res.status(400).json({
+          message: "Informe e confirme a mesma senha provisoria.",
+        });
+      }
+
+      if (!senhaAtendePolitica(senhaProvisoria)) {
+        return res.status(400).json({
+          message:
+            "A senha provisoria deve possuir ao menos 6 caracteres, " +
+            "com letra maiuscula e minuscula.",
+        });
+      }
+
+      client = await pool.connect();
+      await client.query("BEGIN");
+      transacaoAberta = true;
+
+      const gerenciador = await obterGerenciadorUsuarios(
+        client,
+        req,
+        res
+      );
+
+      if (!gerenciador) {
+        await rollbackSeguro(client, transacaoAberta);
+        transacaoAberta = false;
+        return;
+      }
+
+      if (!perfilEhMestre(gerenciador.perfil)) {
+        await rollbackSeguro(client, transacaoAberta);
+        transacaoAberta = false;
+        return res.status(403).json({
+          message:
+            "Apenas o Mestre pode definir uma senha provisoria.",
+        });
+      }
+
+      const usuarioResult = await client.query(
+        `
+        SELECT id, nome, email, perfil, ativo, status_cadastro
+        FROM portal_usuarios
+        WHERE id = $1
+        FOR UPDATE
+        `,
+        [usuarioId]
+      );
+
+      const usuario = usuarioResult.rows[0];
+
+      if (!usuario) {
+        await rollbackSeguro(client, transacaoAberta);
+        transacaoAberta = false;
+        return res.status(404).json({
+          message: "Usuario nao encontrado.",
+        });
+      }
+
+      if (usuario.status_cadastro !== "APROVADO" || !usuario.ativo) {
+        await rollbackSeguro(client, transacaoAberta);
+        transacaoAberta = false;
+        return res.status(409).json({
+          message:
+            "A senha provisoria so pode ser definida para usuario aprovado e ativo.",
+        });
+      }
+
+      const senhaHash = await bcrypt.hash(senhaProvisoria, 10);
+
+      await client.query(
+        `
+        UPDATE portal_usuarios
+        SET
+          senha_hash = $2,
+          primeiro_acesso = TRUE,
+          credencial_versao = credencial_versao + 1,
+          credencial_expira_em = NOW() + INTERVAL '24 hours',
+          credencial_utilizada_em = NULL,
+          versao_sessao = versao_sessao + 1,
+          atualizado_em = NOW()
+        WHERE id = $1
+        `,
+        [usuario.id, senhaHash]
+      );
+
+      await client.query(
+        `
+        INSERT INTO portal_usuario_aprovacao_historico (
+          usuario_id,
+          status_anterior,
+          status_novo,
+          perfil_concedido,
+          responsavel_id,
+          motivo
+        )
+        VALUES ($1, 'APROVADO', 'APROVADO', $2, $3, $4)
+        `,
+        [
+          usuario.id,
+          usuario.perfil,
+          gerenciador.id,
+          "Senha provisoria redefinida pelo Mestre",
+        ]
+      );
+
+      await client.query("COMMIT");
+      transacaoAberta = false;
+
+      return res.json({
+        message:
+          "Senha provisoria definida. As sessoes anteriores foram encerradas.",
+      });
+    } catch (error) {
+      await rollbackSeguro(client, transacaoAberta);
+      return responderErroUsuario(
+        res,
+        error,
+        "definir senha provisoria"
+      );
+    } finally {
+      client?.release();
+    }
+  }
+);
+
+router.patch("/me/telefone", authMiddleware, async (req, res) => {
+  try {
+    const telefone = normalizarTelefone(req.body.telefone);
+
+    if (!telefone) {
+      return res.status(400).json({
+        message:
+          "Informe um celular valido com DDD + 9 digitos.",
+      });
+    }
+
+    const result = await pool.query(
+      `
+      UPDATE portal_usuarios
+      SET
+        telefone = $2,
+        atualizado_em = NOW()
+      WHERE id = $1
+      RETURNING id, nome, email, telefone
+      `,
+      [req.user.id, telefone]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({
+        message: "Usuario nao encontrado.",
+      });
+    }
+
+    return res.json({
+      message: "Telefone atualizado com sucesso.",
+      usuario: result.rows[0],
+    });
+  } catch (error) {
+    return responderErroUsuario(res, error, "atualizar telefone");
   }
 });
 
@@ -1005,15 +1411,28 @@ router.put("/:id", authMiddleware, async (req, res) => {
 
   try {
     const { id } = req.params;
-    const { nome, email, perfil, ativo, shoppingIds = [] } = req.body;
+    const {
+      nome,
+      email,
+      telefone,
+      perfil,
+      ativo,
+      shoppingIds = [],
+    } = req.body;
     const nomeNormalizado = String(nome || "").trim();
     const emailNormalizado = String(email || "").trim().toLowerCase();
+    const telefoneNormalizado = normalizarTelefone(telefone);
     const perfilNormalizado = normalizarPerfil(perfil);
     const shoppingIdsNormalizados = normalizarShoppingIds(shoppingIds);
 
-    if (!nomeNormalizado || !emailNormalizado || !perfilNormalizado) {
+    if (
+      !nomeNormalizado ||
+      !emailNormalizado ||
+      !telefoneNormalizado ||
+      !perfilNormalizado
+    ) {
       return res.status(400).json({
-        message: "Informe nome, e-mail e perfil.",
+        message: "Informe nome, e-mail, celular e perfil.",
       });
     }
 
@@ -1131,9 +1550,10 @@ router.put("/:id", authMiddleware, async (req, res) => {
 UPDATE portal_usuarios
 SET nome = $1,
     email = $2,
-    perfil = $3,
-    ativo = $4,
-    senha_hash = COALESCE(senha_hash, $6),
+    telefone = $3,
+    perfil = $4,
+    ativo = $5,
+    senha_hash = COALESCE(senha_hash, $7),
     atualizado_em = NOW(),
     versao_sessao = versao_sessao + 1,
     credencial_versao = credencial_versao + 1,
@@ -1147,10 +1567,11 @@ SET nome = $1,
         THEN NULL
       ELSE credencial_utilizada_em
     END
-WHERE id = $5
+WHERE id = $6
 RETURNING
   id,
   email,
+  telefone,
   primeiro_acesso,
   senha_hash,
   credencial_versao
@@ -1158,6 +1579,7 @@ RETURNING
       [
         nomeNormalizado,
         emailNormalizado,
+        telefoneNormalizado,
         perfilNormalizado,
         ativo,
         id,

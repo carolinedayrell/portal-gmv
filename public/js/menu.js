@@ -40,6 +40,14 @@ function renderMenu() {
     <nav>
       <a href="/" class="nav-link" data-path="/">Home</a>
 
+<a
+  href="/meu-perfil"
+  class="nav-link"
+  data-path="/meu-perfil"
+>
+  Meu perfil
+</a>
+
       <div class="nav-group">
         <button type="button" class="nav-toggle" data-menu="faturamento">
           Faturamento

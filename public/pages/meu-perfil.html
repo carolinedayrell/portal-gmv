@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>Meu perfil - Portal GMV</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+
+  <body>
+    <aside id="sidebar" class="sidebar"></aside>
+
+    <main class="content">
+      <header class="page-header">
+        <div>
+          <h2>Meu perfil</h2>
+          <p>Consulte seus dados e atualize seu celular.</p>
+        </div>
+      </header>
+
+      <section class="panel">
+        <form id="meuPerfilForm">
+          <label for="nomeInput">Nome</label>
+          <input
+            id="nomeInput"
+            type="text"
+            readonly
+          />
+
+          <label for="emailInput">E-mail</label>
+          <input
+            id="emailInput"
+            type="email"
+            readonly
+          />
+
+          <label for="telefoneInput">Celular</label>
+          <input
+            id="telefoneInput"
+            type="tel"
+            inputmode="numeric"
+            autocomplete="tel-national"
+            placeholder="(31) 99999-9999"
+            maxlength="15"
+            required
+          />
+
+          <button type="submit">
+            Atualizar telefone
+          </button>
+
+          <p
+            id="perfilMensagem"
+            class="message"
+            aria-live="polite"
+          ></p>
+        </form>
+      </section>
+    </main>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/menu.js"></script>
+    <script src="/js/main.js"></script>
+    <script src="/js/pages/meu-perfil.js"></script>
+  </body>
+</html>

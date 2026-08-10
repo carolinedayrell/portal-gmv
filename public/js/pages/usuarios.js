@@ -1,5 +1,6 @@
 let paginaAtual = 1;
 let usuariosCache = [];
+let modoFormularioUsuario = "edicao";
 
 const limitePorPagina = 25;
 const usuarioLogado = JSON.parse(
@@ -22,6 +23,19 @@ function formatarData(value) {
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function formatarTelefone(value) {
+  const telefone = String(value || "");
+
+  if (!/^[0-9]{11}$/.test(telefone)) {
+    return telefone || "-";
+  }
+
+  return telefone.replace(
+    /^([0-9]{2})([0-9]{5})([0-9]{4})$/,
+    "($1) $2-$3"
+  );
 }
 
 function formatarStatus(status) {
@@ -103,7 +117,18 @@ function renderizarAcoes(usuario) {
         </button>
       `
       : "";
-
+  const redefinirSenha =
+  usuarioLogado?.perfil === "MESTRE"
+    ? `
+      <button
+        type="button"
+        class="table-action secondary-action"
+        onclick="abrirSenhaProvisoria(${id})"
+      >
+        Redefinir senha
+      </button>
+    `
+    : "";
   return `
     <div class="inline-actions">
       <button
@@ -114,8 +139,12 @@ function renderizarAcoes(usuario) {
         Editar
       </button>
       ${reenviar}
+      ${redefinirSenha}
     </div>
   `;
+
+
+
 }
 
 function preencherSelect(select, itens) {
@@ -183,7 +212,7 @@ async function carregarUsuarios() {
     if (!usuariosCache.length) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="7">Nenhum usuário encontrado.</td>
+          <td colspan="8">Nenhum usuário encontrado.</td>
         </tr>
       `;
     } else {
@@ -193,6 +222,11 @@ async function carregarUsuarios() {
             <tr>
               <td>${escapeHtml(usuario.nome)}</td>
               <td>${escapeHtml(usuario.email)}</td>
+              <td>
+  ${escapeHtml(
+    formatarTelefone(usuario.telefone)
+  )}
+</td>
               <td>${escapeHtml(usuario.perfil || "-")}</td>
               <td title="${escapeHtml(formatarShopping(usuario))}">
                 ${escapeHtml(formatarShopping(usuario))}
@@ -224,7 +258,7 @@ async function carregarUsuarios() {
   } catch (error) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7">${escapeHtml(error.message)}</td>
+        <td colspan="8">${escapeHtml(error.message)}</td>
       </tr>
     `;
   }
@@ -257,6 +291,51 @@ function fecharModal(modalId, formId, mensagemId) {
   document.getElementById(mensagemId).textContent = "";
 }
 
+function abrirNovoUsuario() {
+  modoFormularioUsuario = "criacao";
+
+  document.getElementById(
+    "usuarioForm"
+  ).reset();
+
+  document.getElementById(
+    "usuarioIdInput"
+  ).value = "";
+
+  document.getElementById(
+    "usuarioModalTitulo"
+  ).textContent = "Novo usuário";
+
+  document.getElementById(
+    "salvarUsuarioButton"
+  ).textContent = "Criar usuário";
+
+  document.getElementById(
+    "senhaProvisoriaGroup"
+  ).hidden = false;
+
+  document.getElementById(
+    "senhaProvisoriaInput"
+  ).required = true;
+
+  document.getElementById(
+    "confirmacaoSenhaInput"
+  ).required = true;
+
+  document.getElementById(
+    "ativoInput"
+  ).value = "true";
+
+  document.getElementById(
+    "usuarioModal"
+  ).hidden = false;
+
+  atualizarVisibilidadeShoppings(
+  "perfilInput",
+  "edicaoShoppingsGroup"
+);
+}
+
 function editarUsuario(usuarioId) {
   const usuario = usuariosCache.find(
     (item) => Number(item.id) === Number(usuarioId)
@@ -275,6 +354,32 @@ function editarUsuario(usuarioId) {
     "edicaoShoppingsGroup"
   );
   document.getElementById("usuarioModal").hidden = false;
+
+  modoFormularioUsuario = "edicao";
+
+document.getElementById(
+  "telefoneInput"
+).value = usuario.telefone || "";
+
+document.getElementById(
+  "senhaProvisoriaGroup"
+).hidden = true;
+
+document.getElementById(
+  "senhaProvisoriaInput"
+).required = false;
+
+document.getElementById(
+  "confirmacaoSenhaInput"
+).required = false;
+
+document.getElementById(
+  "usuarioModalTitulo"
+).textContent = "Editar usuário";
+
+document.getElementById(
+  "salvarUsuarioButton"
+).textContent = "Atualizar usuário";
 }
 
 function abrirAprovacao(usuarioId) {
@@ -314,6 +419,7 @@ async function salvarUsuario(event) {
   const payload = {
     nome: document.getElementById("nomeInput").value,
     email: document.getElementById("emailInput").value,
+    telefone: document.getElementById("telefoneInput").value,
     perfil: document.getElementById("perfilInput").value,
     ativo: document.getElementById("ativoInput").value === "true",
     shoppingIds: obterShoppingsSelecionados("shoppingsInput"),
@@ -321,11 +427,31 @@ async function salvarUsuario(event) {
 
   mensagem.textContent = "";
 
-  try {
-    await apiRequest(`/usuarios/${usuarioId}`, {
-      method: "PUT",
+try {
+  if (modoFormularioUsuario === "criacao") {
+    payload.senhaProvisoria =
+      document.getElementById(
+        "senhaProvisoriaInput"
+      ).value;
+
+    payload.confirmacaoSenha =
+      document.getElementById(
+        "confirmacaoSenhaInput"
+      ).value;
+
+    await apiRequest("/usuarios", {
+      method: "POST",
       body: JSON.stringify(payload),
     });
+  } else {
+    await apiRequest(
+      `/usuarios/${usuarioId}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }
+    );
+  }
 
     fecharModal("usuarioModal", "usuarioForm", "usuarioMensagem");
     await carregarUsuarios();
@@ -390,6 +516,69 @@ async function rejeitarUsuario(event) {
     );
     await carregarUsuarios();
   } catch (error) {
+    mensagem.textContent = error.message;
+  }
+}
+
+function abrirSenhaProvisoria(usuarioId) {
+  document.getElementById(
+    "senhaProvisoriaForm"
+  ).reset();
+
+  document.getElementById(
+    "senhaProvisoriaMensagem"
+  ).textContent = "";
+
+  document.getElementById(
+    "senhaUsuarioIdInput"
+  ).value = usuarioId;
+
+  document.getElementById(
+    "senhaProvisoriaModal"
+  ).hidden = false;
+}
+
+async function salvarSenhaProvisoria(event) {
+  event.preventDefault();
+
+  const usuarioId = document.getElementById(
+    "senhaUsuarioIdInput"
+  ).value;
+
+  const mensagem = document.getElementById(
+    "senhaProvisoriaMensagem"
+  );
+
+  try {
+    const response = await apiRequest(
+      `/usuarios/${usuarioId}/senha-provisoria`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          senhaProvisoria:
+            document.getElementById(
+              "novaSenhaProvisoriaInput"
+            ).value,
+          confirmacaoSenha:
+            document.getElementById(
+              "confirmacaoNovaSenhaInput"
+            ).value,
+        }),
+      }
+    );
+
+  mensagem.dataset.status = "success";
+mensagem.textContent = response.message;
+
+    window.setTimeout(() => {
+      fecharModal(
+        "senhaProvisoriaModal",
+        "senhaProvisoriaForm",
+        "senhaProvisoriaMensagem"
+      );
+    }, 1200);
+  } catch (error) {
+    delete mensagem.dataset.status;
     mensagem.textContent = error.message;
   }
 }
@@ -477,9 +666,41 @@ document.getElementById("fecharRejeicaoButton").addEventListener("click", () => 
   );
 });
 
+document
+  .getElementById(
+    "fecharSenhaProvisoriaButton"
+  )
+  .addEventListener("click", () => {
+    fecharModal(
+      "senhaProvisoriaModal",
+      "senhaProvisoriaForm",
+      "senhaProvisoriaMensagem"
+    );
+  });
+
 document.getElementById("usuarioForm").addEventListener("submit", salvarUsuario);
 document.getElementById("aprovacaoForm").addEventListener("submit", aprovarUsuario);
 document.getElementById("rejeicaoForm").addEventListener("submit", rejeitarUsuario);
+const novoUsuarioButton =
+  document.getElementById(
+    "novoUsuarioButton"
+  );
+
+if (usuarioLogado?.perfil === "MESTRE") {
+  novoUsuarioButton.hidden = false;
+  novoUsuarioButton.addEventListener(
+    "click",
+    abrirNovoUsuario
+  );
+}
+
+document.getElementById(
+  "senhaProvisoriaForm"
+).addEventListener(
+  "submit",
+  salvarSenhaProvisoria
+);
+
 
 carregarOpcoes()
   .then(carregarUsuarios)

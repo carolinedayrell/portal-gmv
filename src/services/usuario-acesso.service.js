@@ -58,6 +58,31 @@ function normalizarShoppingIds(shoppingIds) {
   ];
 }
 
+function normalizarTelefone(valor) {
+  const bruto = String(valor || "").trim();
+
+  if (!bruto || !/^[0-9()+.\-\s]+$/.test(bruto)) {
+    return null;
+  }
+
+  let digitos = bruto.replace(/\D/g, "");
+
+  // Permite colar número com +55, mas não o armazena.
+  if (digitos.length === 13 && digitos.startsWith("55")) {
+    digitos = digitos.slice(2);
+  }
+
+  if (!/^[1-9][0-9]9[0-9]{8}$/.test(digitos)) {
+    return null;
+  }
+
+  return digitos;
+}
+
+function perfilEhMestre(perfil) {
+  return normalizarPerfil(perfil) === "MESTRE";
+}
+
 function senhaAtendePolitica(senha) {
   const valor = String(senha || "");
 
@@ -89,6 +114,8 @@ module.exports = {
   PERFIS_VALIDOS,
   normalizarPerfil,
   normalizarShoppingIds,
+  normalizarTelefone,
+  perfilEhMestre,
   podeAlterarUsuario,
   podeConcederPerfil,
   podeGerenciarUsuarios,
